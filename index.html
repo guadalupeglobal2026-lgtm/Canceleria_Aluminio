@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Cortes Línea 3" · Taller</title>
+<title>Cortes de Aluminio Godo</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
@@ -114,7 +114,7 @@ textarea{font-family:var(--mono);font-size:.8rem;min-height:120px}
   <header>
     <div class="ruler" aria-hidden="true"></div>
     <div class="top">
-      <h1>Cortes de aluminio <span>Línea 3"</span></h1>
+      <h1>Cortes de Aluminio <span>Godo</span></h1>
       <div class="row">
         <span class="status" id="status" role="status">Conectando…</span>
       </div>
@@ -257,7 +257,7 @@ const CATALOGO=[
 const LINEAS=['3"','2"','1 3/4"','Mosquitero','Otros'];
 function tiposIniciales(){
   const q=(perfil,base,desc,cant)=>({perfil,base,desc,cant});
-  const marco3=()=>[q('Cabezal 3"','A',0,1),q('Riel 3"','A',0,1),q('Riel adicional 3"','A',0,1),q('Jamba 3"','H',2.8,2),q('Jamba / chambrana 2"','A',0,1),q('Jamba / chambrana 2"','H',0,2)];
+  const marco3=()=>[q('Cabezal 3"','A',0,1),q('Riel 3"','A',0,1),q('Riel adicional 3"','A',0,1),q('Jamba 3"','H',2.8,2)];
   const marco2=()=>[q('Jamba / chambrana 2"','A',0,1),q('Riel 2"','A',0,1),q('Jamba / chambrana 2"','H',2.8,2)];
   return [
     {nombre:'Ventana corrediza 2 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',2.8,2),q('Traslape 3"','H',2.8,2),q('Zoclo 3"','A/2',3.3,4)]},
@@ -284,12 +284,13 @@ function tiposIniciales(){
   ];
 }
 function configInicial(){
-  return {version:4,kerf:0.4,minUtil:30,prueba:{A:150,H:120},perfiles:CATALOGO.map(p=>({...p})),tipos:tiposIniciales()};
+  return {version:5,kerf:0.4,minUtil:30,prueba:{A:150,H:120},perfiles:CATALOGO.map(p=>({...p})),tipos:tiposIniciales()};
 }
 /* Pasa una configuración anterior (solo 3") al catálogo completo, sin perder descuentos ni precios ya capturados */
 function migrarCatalogo(){
-  const c=D.config;const V=4;if((c.version||1)>=V)return false;
-  if((c.version||1)>=2){CATALOGO.forEach(k=>{if(!c.perfiles.some(p=>p.nombre===k.nombre))c.perfiles.push({...k})});
+  const c=D.config;const V=5;if((c.version||1)>=V)return false;
+  if((c.version||1)>=2){c.tipos.forEach(t=>{if(t.linea==='3"')t.piezas=t.piezas.filter(p=>p.perfil!=='Jamba / chambrana 2"')});
+    CATALOGO.forEach(k=>{if(!c.perfiles.some(p=>p.nombre===k.nombre))c.perfiles.push({...k})});
     tiposIniciales().forEach(t=>{if(!c.tipos.some(x=>x.nombre===t.nombre))c.tipos.push(t)});c.version=V;return {invCambio:false,renTipo:{}}}
   const ren={'Cabezal':'Cabezal 3"','Riel':'Riel 3"','Jamba':'Jamba 3"','Cerco':'Cerco 3"','Traslape':'Traslape 3"','Zoclo':'Zoclo 3"','Zoclo puerta':'Zoclo puerta 3"'};
   const precio={};c.perfiles.forEach(p=>{const n=ren[p.nombre]||p.nombre;precio[n]=p;});
@@ -301,7 +302,6 @@ function migrarCatalogo(){
     if(!/[23]"$/.test(t.nombre)){const n=t.nombre+' 3"';renTipo[t.nombre]=n;t.nombre=n}t.linea??='3"';
     if(t.linea==='3"'){
       if(!t.piezas.some(p=>p.perfil==='Riel adicional 3"'))t.piezas.splice(2,0,{perfil:'Riel adicional 3"',base:'A',desc:0,cant:1});
-      if(!t.piezas.some(p=>p.perfil==='Jamba / chambrana 2"'))t.piezas.splice(4,0,{perfil:'Jamba / chambrana 2"',base:'A',desc:0,cant:1},{perfil:'Jamba / chambrana 2"',base:'H',desc:0,cant:2});
     }});
   tiposIniciales().forEach(t=>{if(!c.tipos.some(x=>x.nombre===t.nombre))c.tipos.push(t)});
   c.version=V;
@@ -457,6 +457,84 @@ $('#tbInv').addEventListener('click',e=>{const d=e.target.dataset.del;if(d==null
 $('#addInv').onclick=()=>{D.inventario.push({perfil:D.config.perfiles[0]?.nombre||'',largo:610,cant:1,nota:''});guardarInv();renderInv()};
 
 /* ---------- CÁLCULO ---------- */
+/* Acomodo óptimo de cortes en barras: primero el material existente, luego el mínimo de tramos nuevos.
+   cortes: [{len,...}]  inv: [{largo,nota}]  tramo: cm  kerf: cm
+   Devuelve {barras:[{fuente:'inv'|'nuevo',largo,nota,cortes:[...]}], sinUsar:[inv...], exacto:bool} */
+function optimizarCortes(cortes,inv,tramo,kerf,limiteNodos){
+  limiteNodos=limiteNodos||250000;
+  const EPS=1e-6;
+  const items=cortes.map(c=>({c,w:c.len+kerf})).sort((a,b)=>b.w-a.w);
+  const n=items.length;
+  const suf=new Array(n+1).fill(0);for(let i=n-1;i>=0;i--)suf[i]=suf[i+1]+items[i].w;
+  const invBins=inv.map(p=>({fuente:'inv',largo:p.largo,nota:p.nota,cap:p.largo+kerf}));
+  const capNueva=tramo+kerf;
+
+  // 1) acomodo rápido (mejor ajuste decreciente) como referencia
+  function rapido(){
+    const bins=invBins.map(b=>({...b,rem:b.cap,cortes:[]}));const nuevas=[];
+    for(const it of items){
+      let best=null,bs=Infinity;
+      for(const b of bins.concat(nuevas)){const s=b.rem-it.w;if(s>=-EPS&&s<bs-EPS){best=b;bs=s}}
+      if(!best){best={fuente:'nuevo',largo:tramo,cap:capNueva,rem:capNueva,cortes:[]};nuevas.push(best)}
+      best.cortes.push(it.c);best.rem-=it.w;
+    }
+    return bins.concat(nuevas);
+  }
+  const base=rapido();
+  const nuevasBase=base.filter(b=>b.fuente==='nuevo').length;
+  const capInv=invBins.reduce((s,b)=>s+b.cap,0);
+  const cotaMin=Math.max(0,Math.ceil((suf[0]-capInv)/capNueva-EPS));
+  if(nuevasBase<=cotaMin)return final(base,true);
+
+  // 2) búsqueda exacta: ¿caben todos los cortes con el material existente + k tramos nuevos?
+  function intenta(k){
+    const bins=invBins.map(b=>({...b,rem:b.cap,cortes:[]}));
+    for(let j=0;j<k;j++)bins.push({fuente:'nuevo',largo:tramo,cap:capNueva,rem:capNueva,cortes:[]});
+    let nodos=0,agotado=false;
+    const minW=i=>items[n-1].w;
+    function dfs(i){
+      if(i===n)return true;
+      if(++nodos>limiteNodos){agotado=true;return false}
+      // poda: el espacio libre útil debe alcanzar para lo que falta
+      const wMin=minW(i);let libre=0;for(const b of bins)if(b.rem>=wMin-EPS)libre+=b.rem;
+      if(libre<suf[i]-EPS)return false;
+      const it=items[i];
+      const cand=bins.filter(b=>b.rem>=it.w-EPS).sort((a,b)=>a.rem-b.rem);
+      const vistos=new Set();
+      for(const b of cand){
+        const key=(b.fuente==='nuevo'&&!b.cortes.length?'N':b.fuente[0]+b.largo)+'|'+b.rem.toFixed(3);
+        if(vistos.has(key))continue;vistos.add(key);
+        b.rem-=it.w;b.cortes.push(it.c);
+        if(dfs(i+1))return true;
+        b.rem+=it.w;b.cortes.pop();
+        if(agotado)return false;
+      }
+      return false;
+    }
+    const ok=dfs(0);
+    return {ok,agotado,bins};
+  }
+  let exacto=true;
+  for(let k=cotaMin;k<nuevasBase;k++){
+    const r=intenta(k);
+    if(r.ok)return final(r.bins,exacto);
+    if(r.agotado)exacto=false;
+  }
+  return final(base,exacto);
+
+  function final(bins,ex){
+    const usadas=bins.filter(b=>b.cortes.length).map(b=>{
+      const cs=b.cortes.slice().sort((x,y)=>y.len-x.len);
+      const sum=cs.reduce((s,c)=>s+c.len,0);
+      const r=b.largo-sum-kerf*(cs.length-1);
+      return {fuente:b.fuente,largo:b.largo,nota:b.nota,cortes:cs,rest:Math.max(0,r>=kerf?r-kerf:0)};
+    });
+    const sinUsar=bins.filter(b=>b.fuente==='inv'&&!b.cortes.length).map(b=>({fuente:'inv',largo:b.largo,nota:b.nota,rest:b.largo,cortes:[]}));
+    usadas.sort((a,b)=>a.fuente===b.fuente?b.largo-a.largo:a.fuente==='inv'?-1:1);
+    return {barras:usadas,sinUsar,exacto:ex};
+  }
+}
+
 function obrasCalc(){const pend=D.obras.filter(o=>o.estado!=='cortada');return calcSel?pend.filter(o=>calcSel.has(o.id)):pend}
 function calcular(){
   const C=D.config,errores=[],cortes={};
@@ -475,18 +553,9 @@ function calcular(){
     const invPiezas=[];
     D.inventario.forEach((x,ix)=>{if(x.perfil!==perf.nombre||!(+x.largo>0))return;for(let k=0;k<Math.max(1,Math.round(+x.cant||1));k++)invPiezas.push({fuente:'inv',largo:+x.largo,rest:+x.largo,cortes:[],abierta:false,nota:x.nota})});
     if(!lista.length){res.push({perf,barras:[],sinUsar:invPiezas,nuevas:0,necesario:0});continue}
-    const barras=[];
-    for(const c of lista){
-      let best=null,bestSob=Infinity;
-      for(const b of barras){const s=b.rest-c.len;if(s>=-1e-9&&s<bestSob-1e-9){best=b;bestSob=s}}
-      for(const b of invPiezas){if(b.abierta)continue;const s=b.rest-c.len;if(s>=-1e-9&&s<bestSob-1e-9){best=b;bestSob=s}}
-      if(!best){if(c.len>perf.tramo){errores.push(`${perf.nombre} de ${fmt(c.len)} cm (${c.et}) es más largo que el tramo de ${perf.tramo} cm.`);continue}
-        best={fuente:'nuevo',largo:+perf.tramo,rest:+perf.tramo,cortes:[]};barras.push(best)}
-      else if(best.fuente==='inv'&&!best.abierta){best.abierta=true;barras.push(best)}
-      best.cortes.push(c);best.rest-=c.len;best.rest=best.rest>=kerf?best.rest-kerf:0;
-    }
-    barras.sort((a,b)=>a.fuente===b.fuente?b.largo-a.largo:a.fuente==='inv'?-1:1);
-    res.push({perf,barras,sinUsar:invPiezas.filter(b=>!b.abierta),nuevas:barras.filter(b=>b.fuente==='nuevo').length,necesario:lista.reduce((s,c)=>s+c.len,0)});
+    const validos=lista.filter(c=>{if(c.len>perf.tramo&&!invPiezas.some(b=>b.largo>=c.len)){errores.push(`${perf.nombre} de ${fmt(c.len)} cm (${c.et}) es más largo que el tramo de ${perf.tramo} cm.`);return false}return true});
+    const o=optimizarCortes(validos,invPiezas.map(b=>({largo:b.largo,nota:b.nota})),+perf.tramo,kerf);
+    res.push({perf,barras:o.barras,sinUsar:o.sinUsar,exacto:o.exacto,nuevas:o.barras.filter(b=>b.fuente==='nuevo').length,necesario:lista.reduce((s,c)=>s+c.len,0)});
   }
   for(const k in cortes)if(!C.perfiles.some(p=>p.nombre===k))errores.push(`El perfil «${k}» se usa en una fórmula pero no está en la lista de perfiles.`);
   return {res,errores,minU};
@@ -502,7 +571,7 @@ function renderRes(){
     r.barras.forEach(b=>{cons+=b.largo;if(b.fuente==='inv')usadoInv+=b.cortes.reduce((s,c)=>s+c.len,0);if(b.rest>=minU)util+=b.rest;else desp+=b.rest})});
   $('#tiles').innerHTML=`<div class="tile key"><b>${tram}</b><span>tramos nuevos a comprar</span></div>
     <div class="tile"><b>${fmt(usadoInv/100,2)} m</b><span>de cortes salen del material del taller</span></div>
-    <div class="tile"><b>${fmt(cons?usado/cons*100:0,0)}%</b><span>aprovechamiento de lo que se corta</span></div>
+    <div class="tile"><b>${fmt(cons?(usado+util)/cons*100:0,0)}%</b><span>del material cortado se aprovecha (piezas + sobrantes útiles)</span></div>
     <div class="tile"><b>${fmt(util/100,2)} m</b><span>quedan como sobrante útil · ${fmt(desp/100,2)} m desperdicio</span></div>
     ${costo>0?`<div class="tile"><b>${money(costo)}</b><span>costo estimado de compra</span></div>`:''}`;
   $('#tbCompra').innerHTML=res.filter(r=>r.necesario>0).map(r=>{const deInv=r.barras.filter(b=>b.fuente==='inv').reduce((s,b)=>s+b.cortes.reduce((x,c)=>x+c.len,0),0);
@@ -521,7 +590,7 @@ function renderRes(){
 $('#selObras').addEventListener('change',e=>{const id=e.target.dataset.calc;if(!id)return;
   if(!calcSel)calcSel=new Set(D.obras.filter(o=>o.estado!=='cortada').map(o=>o.id));
   e.target.checked?calcSel.add(id):calcSel.delete(id);renderRes()});
-$('#copyCompra').onclick=()=>{const txt='LISTA DE COMPRA – Línea 3"\nObras: '+obrasCalc().map(o=>o.nombre).join(', ')+'\n'+(ultimo||[]).filter(x=>x.nuevas>0).map(x=>`${x.perf.nombre}: ${x.nuevas} tramo(s) de ${fmt(x.perf.tramo/100,2)} m`).join('\n');
+$('#copyCompra').onclick=()=>{const txt='LISTA DE COMPRA – Cortes de Aluminio Godo\nObras: '+obrasCalc().map(o=>o.nombre).join(', ')+'\n'+(ultimo||[]).filter(x=>x.nuevas>0).map(x=>`${x.perf.nombre}: ${x.nuevas} tramo(s) de ${fmt(x.perf.tramo/100,2)} m`).join('\n');
   navigator.clipboard.writeText(txt).then(()=>{$('#copyMsg').hidden=false;setTimeout(()=>$('#copyMsg').hidden=true,2000)}).catch(()=>{$('#json').value=txt;show('formulas')})};
 $('#aplicar').onclick=()=>{const n=obrasCalc().length;if(!n)return;$('#confirmTxt').textContent=`¿Marcar ${n} obra(s) como cortadas y actualizar el material del taller?`;$('#confirmBox').hidden=false};
 $('#aplicarNo').onclick=()=>{$('#confirmBox').hidden=true};

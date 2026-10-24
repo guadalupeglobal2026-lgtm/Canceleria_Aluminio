@@ -35,6 +35,8 @@ h2{font-family:var(--display);font-weight:600;font-size:1.5rem;margin:0;letter-s
 h3{font-family:var(--display);font-weight:600;font-size:1.2rem;margin:0}
 .who{display:flex;gap:8px;align-items:center;font-size:.85rem;color:var(--muted)}
 .who input{width:150px}
+.hoja-link{font-size:.85rem;font-weight:600;color:var(--accent);text-decoration:none;border:1px solid var(--accent);border-radius:4px;padding:4px 10px}
+.hoja-link:hover{background:var(--accent-soft)}
 .status{font-size:.82rem;font-weight:600;color:var(--muted)}
 .status.ok{color:var(--ok)}.status.bad{color:var(--bad)}
 .tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:2px solid var(--line)}
@@ -116,6 +118,7 @@ textarea{font-family:var(--mono);font-size:.8rem;min-height:120px}
     <div class="top">
       <h1>Cortes de Aluminio <span>Godo</span></h1>
       <div class="row">
+        <a class="hoja-link" id="linkHoja" href="#" target="_blank" rel="noopener" hidden>Abrir hoja de Google ↗</a>
         <span class="status" id="status" role="status">Conectando…</span>
       </div>
     </div>
@@ -171,7 +174,8 @@ textarea{font-family:var(--mono);font-size:.8rem;min-height:120px}
     <div id="errores"></div>
     <div class="tiles" id="tiles"></div>
     <div class="panel">
-      <div class="row" style="justify-content:space-between"><h2>Lista de compra</h2><button id="copyCompra">Copiar lista</button></div>
+      <div class="row" style="justify-content:space-between"><h2>Lista de compra</h2><span class="row"><button class="primary" id="guardarHoja">Guardar en mi hoja de Google</button><button id="copyCompra">Copiar lista</button></span></div>
+      <span class="row"><span class="note" id="hojaMsg" role="status" hidden></span><a class="hoja-link" id="linkHoja2" href="#" target="_blank" rel="noopener" hidden>Ver en la hoja ↗</a></span>
       <div class="tablewrap"><table>
         <thead><tr><th>Perfil</th><th class="num">Metros necesarios</th><th class="num">Del taller</th><th class="num">Tramos a comprar</th><th class="num">Costo</th></tr></thead>
         <tbody id="tbCompra"></tbody>
@@ -318,6 +322,7 @@ const hoy=()=>{const d=new Date();return d.getFullYear()+'-'+String(d.getMonth()
 const fechaTxt=f=>{if(!f)return 'Sin fecha';const [y,m,d]=f.split('-').map(Number);return new Date(y,m-1,d).toLocaleDateString('es-MX',{day:'numeric',month:'short',year:'numeric'})};
 const mesTxt=f=>{if(!f)return 'Sin fecha';const [y,m]=f.split('-').map(Number);const t=new Date(y,m-1,1).toLocaleDateString('es-MX',{month:'long',year:'numeric'});return t[0].toUpperCase()+t.slice(1)};
 
+function ponerLinkHoja(u){const a=$('#linkHoja');if(!a||!/^https:\/\/docs\.google\.com\//.test(u))return;a.href=u;a.hidden=false;const b=$('#linkHoja2');if(b){b.href=u;b.hidden=false}}
 function cacheLocal(){ls.set('cache',JSON.stringify(D))}
 function status(t,cls){const e=$('#status');e.textContent=t;e.className='status'+(cls?' '+cls:'')}
 
@@ -359,6 +364,7 @@ async function refrescar(silencioso){
     const j=await leerServidor();
     const ae=document.activeElement;const editando=ae&&['INPUT','SELECT','TEXTAREA'].includes(ae.tagName);
     if(editando&&silencioso)return;
+    if(j.hojaUrl){ls.set('hojaUrl',j.hojaUrl);ponerLinkHoja(j.hojaUrl)}
     D.config=j.config||D.config;D.inventario=j.inventario||[];D.obras=j.obras||[];
     normalizar();cacheLocal();renderTodo();
     if(!j.config)guardarCfg();
@@ -590,6 +596,24 @@ function renderRes(){
 $('#selObras').addEventListener('change',e=>{const id=e.target.dataset.calc;if(!id)return;
   if(!calcSel)calcSel=new Set(D.obras.filter(o=>o.estado!=='cortada').map(o=>o.id));
   e.target.checked?calcSel.add(id):calcSel.delete(id);renderRes()});
+function nombreObra(o){return o.nombre||('Obra del '+fechaTxt(o.fecha))}
+$('#guardarHoja').onclick=async()=>{
+  const m=$('#hojaMsg');const di=t=>{m.textContent=t;m.hidden=false};
+  if(modo!=='nube'){di('Sin conexión con el taller: no se pudo guardar en la hoja.');return}
+  const res=ultimo||[];const obras=obrasCalc();if(!obras.length){di('Marca al menos una obra para guardar.');return}
+  const r2=x=>Math.round(x*100)/100;
+  const reporte={fecha:new Date().toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'}),obras:obras.map(nombreObra),
+    compra:res.filter(r=>r.necesario>0).map(r=>{const deInv=r.barras.filter(b=>b.fuente==='inv').reduce((s,b)=>s+b.cortes.reduce((x,c)=>x+c.len,0),0);
+      return [r.perf.nombre,r.perf.clave||'',r2(r.necesario/100),r2(deInv/100),r.nuevas,r2(r.perf.tramo/100),r2(r.nuevas*(+r.perf.precio||0))]}),
+    despiece:[],plan:[]};
+  obras.forEach(o=>o.ventanas.forEach(v=>{const t=D.config.tipos.find(x=>x.nombre===v.tipo);if(!t)return;const n=Math.max(1,Math.round(+v.cant||1));
+    t.piezas.forEach(p=>{const L=evalPieza(p,+v.ancho,+v.alto);reporte.despiece.push([nombreObra(o),o.fecha||'',v.nombre||'',v.tipo,+v.ancho,+v.alto,p.perfil,isNaN(L)?'':r2(L),(+p.cant||0)*n])})}));
+  res.forEach(r=>r.barras.forEach((b,i)=>reporte.plan.push([r.perf.nombre,i+1,b.fuente==='inv'?'Del taller':'Comprar',b.largo,b.cortes.map(c=>fmt(c.len)+' ('+(c.et||'')+')').join(' + '),r2(b.rest)])));
+  di('Guardando en tu hoja…');
+  try{const rr=await fetch(api.url,{method:'POST',body:JSON.stringify({clave:api.clave,accion:'reporte',reporte})});const j=await rr.json();
+    if(!j.ok)throw new Error(j.error);di('✓ Guardado en tu hoja: pestañas Compra, Despiece, Plan de cortes e Historial de compras.')}
+  catch(e){di(e.message==='clave'?'La clave del taller no es correcta.':'No se pudo guardar. Si acabas de actualizar el código del servidor, revisa que publicaste una Nueva versión.')}
+};
 $('#copyCompra').onclick=()=>{const txt='LISTA DE COMPRA – Cortes de Aluminio Godo\nObras: '+obrasCalc().map(o=>o.nombre).join(', ')+'\n'+(ultimo||[]).filter(x=>x.nuevas>0).map(x=>`${x.perf.nombre}: ${x.nuevas} tramo(s) de ${fmt(x.perf.tramo/100,2)} m`).join('\n');
   navigator.clipboard.writeText(txt).then(()=>{$('#copyMsg').hidden=false;setTimeout(()=>$('#copyMsg').hidden=true,2000)}).catch(()=>{$('#json').value=txt;show('formulas')})};
 $('#aplicar').onclick=()=>{const n=obrasCalc().length;if(!n)return;$('#confirmTxt').textContent=`¿Marcar ${n} obra(s) como cortadas y actualizar el material del taller?`;$('#confirmBox').hidden=false};
@@ -676,7 +700,7 @@ function show(v){document.querySelectorAll('[data-view]').forEach(s=>s.hidden=s.
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>show(t.dataset.v));
 $('#filtro').value=['pend','todas','cort'].includes(ls.get('filtro'))?ls.get('filtro'):'pend';
 
-function abrirApp(){$('#login').hidden=true;$('#app').hidden=false;renderTodo();show(ls.get('tab')||'obras')}
+function abrirApp(){const hu=ls.get('hojaUrl');if(hu)ponerLinkHoja(hu);$('#login').hidden=true;$('#app').hidden=false;renderTodo();show(ls.get('tab')||'obras')}
 async function iniciar(){
   try{const c=JSON.parse(ls.get('cache')||'null');if(c&&c.config){D=c;normalizar()}}catch(e){}
   if(!api.url||!api.clave){$('#login').hidden=false;$('#lUrlBox').hidden=!!API_URL;$('#lUrl').value=api.url;status('Sin conectar','');return}

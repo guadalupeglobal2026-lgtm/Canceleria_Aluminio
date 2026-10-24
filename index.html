@@ -297,6 +297,9 @@ function tiposIniciales(){
     {nombre:'Ventana doble corrediza 2 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',4,2,CORRE),q('Traslape 3"','H',4,2,CORRE),f('Zoclo 3"','(A-18)/2',4)]},
     {nombre:'Ventana corrediza 2 hojas, 1 fija 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',3,1,FIJA),q('Traslape 3"','H',3,1,FIJA),q('Cerco 3"','H',4,1,CORRE),q('Traslape 3"','H',4,1,CORRE),f('Zoclo 3"','(A-18)/2',4)]},
     {nombre:'Ventana triple corrediza 3 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',4,2,CORRE),q('Traslape 3"','H',4,4,CORRE),f('Zoclo 3"','(A-23.2)/3',6)]},
+    /* 3 hojas X-O-X: la del centro fija (2 traslapes a −3) y las dos de los lados corren (cerco + traslape a −4) */
+    {nombre:'Ventana 3 hojas, centro fijo X-O-X 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',4,2,CORRE),q('Traslape 3"','H',4,2,CORRE),q('Traslape 3"','H',3,2,FIJA),f('Zoclo 3"','(A-23.2)/3',6)]},
+    {nombre:'Cancel 3 hojas, centro fijo X-O-X 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',4,2,CORRE),q('Traslape 3"','H',4,2,CORRE),q('Traslape 3"','H',3,2,FIJA),f('Zoclo 3"','(A-23.2)/3',6)]},
     {nombre:'Puerta corrediza 2 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco chapa puerta 3"','H',4,2,CORRE),q('Traslape puerta 3"','H',4,2,CORRE),f('Zoclo 3"','(A-18)/2',2),f('Zoclo puerta 3"','(A-18)/2',2)]},
     {nombre:'Cancel de baño 2 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',4,2,CORRE),q('Traslape 3"','H',4,2,CORRE),f('Zoclo 3"','(A-18)/2',4)]},
     {nombre:'Cancel triple corrediza 3 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',4,2,CORRE),q('Traslape 3"','H',4,4,CORRE),f('Zoclo 3"','(A-23.2)/3',6)]},
@@ -306,6 +309,8 @@ function tiposIniciales(){
     {nombre:'Ventana doble corrediza 2 hojas 2"',linea:'2"',piezas:[...marco2(),q('Cerco ventana 2"','H',4,2,CORRE),q('Traslape ventana 2"','H',4,2,CORRE),q('Cabezal y zoclo 2"','A/2',3.3,4)]},
     {nombre:'Ventana corrediza 2 hojas, 1 fija 2"',linea:'2"',piezas:[...marco2(),q('Cerco ventana 2"','H',3,1,FIJA),q('Traslape ventana 2"','H',3,1,FIJA),q('Cerco ventana 2"','H',4,1,CORRE),q('Traslape ventana 2"','H',4,1,CORRE),q('Cabezal y zoclo 2"','A/2',3.3,4)]},
     {nombre:'Ventana triple corrediza 3 hojas 2"',linea:'2"',piezas:[...marco2(),q('Cerco ventana 2"','H',4,2,CORRE),q('Traslape ventana 2"','H',4,4,CORRE),q('Cabezal y zoclo 2"','A/3',3.1,6)]},
+    {nombre:'Ventana 3 hojas, centro fijo X-O-X 2"',linea:'2"',piezas:[...marco2(),q('Cerco ventana 2"','H',4,2,CORRE),q('Traslape ventana 2"','H',4,2,CORRE),q('Traslape ventana 2"','H',3,2,FIJA),q('Cabezal y zoclo 2"','A/3',3.1,6)]},
+    {nombre:'Cancel 3 hojas, centro fijo X-O-X 2"',linea:'2"',piezas:[...marco2(),q('Cerco ventana 2"','H',4,2,CORRE),q('Traslape ventana 2"','H',4,2,CORRE),q('Traslape ventana 2"','H',3,2,FIJA),q('Cabezal y zoclo 2"','A/3',3.1,6)]},
     {nombre:'Puerta corrediza 2 hojas 2"',linea:'2"',piezas:[...marco2(),q('Cerco puerta 2"','H',4,2,CORRE),q('Traslape puerta 2"','H',4,2,CORRE),q('Cabezal y zoclo 2"','A/2',3.3,2),q('Zoclo puerta 2"','A/2',3.3,2)]},
     {nombre:'Cancel de baño 2 hojas 2"',linea:'2"',piezas:[...marco2(),q('Cerco ventana 2"','H',4,2,CORRE),q('Traslape ventana 2"','H',4,2,CORRE),q('Cabezal y zoclo 2"','A/2',3.3,4)]},
     {nombre:'Ventana 4 hojas O-X-X-O 2"',linea:'2"',piezas:[...marco2(),q('Cerco ventana 2"','H',3,2,FIJA),q('Traslape ventana 2"','H',3,2,FIJA),q('Traslape ventana 2"','H',4,2,CORRE),q('Cerco OXXO puerta 2"','H',4,2,CORRE),q('Adaptador OXXO','H',4,1,CORRE),q('Cabezal y zoclo 2"','A/4',3.0,8)]},
@@ -319,14 +324,14 @@ function tiposIniciales(){
   ];
 }
 function configInicial(){
-  return {version:7,kerf:0.4,minUtil:30,prueba:{A:150,H:120},perfiles:CATALOGO.map(p=>({...p})),tipos:tiposIniciales()};
+  return {version:8,kerf:0.4,minUtil:30,prueba:{A:150,H:120},perfiles:CATALOGO.map(p=>({...p})),tipos:tiposIniciales()};
 }
 /* Pasa una configuración anterior (solo 3") al catálogo completo, sin perder descuentos ni precios ya capturados */
 const REN_4H={'Ventana doble corrediza 4 hojas 3"':'Ventana 4 hojas O-X-X-O 3"','Cancel doble corrediza 4 hojas 3"':'Cancel 4 hojas O-X-X-O 3"','Puerta doble corrediza 4 hojas 3"':'Puerta 4 hojas O-X-X-O 3"',
   'Ventana doble corrediza 4 hojas 2"':'Ventana 4 hojas O-X-X-O 2"','Cancel doble corrediza 4 hojas 2"':'Cancel 4 hojas O-X-X-O 2"','Puerta doble corrediza 4 hojas 2"':'Puerta 4 hojas O-X-X-O 2"'};
 const esVerticalHoja=p=>p.base==='H'&&(/^(Cerco|Traslape)/.test(p.perfil)||p.perfil==='Adaptador OXXO');
 function migrarCatalogo(){
-  const c=D.config;const V=7;let ver=c.version||1;if(ver>=V)return false;
+  const c=D.config;const V=8;let ver=c.version||1;if(ver>=V)return false;
   let invCambio=false;const renTipo={};
   if(ver<2){
     const ren={'Cabezal':'Cabezal 3"','Riel':'Riel 3"','Jamba':'Jamba 3"','Cerco':'Cerco 3"','Traslape':'Traslape 3"','Zoclo':'Zoclo 3"','Zoclo puerta':'Zoclo puerta 3"'};

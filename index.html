@@ -208,7 +208,7 @@ textarea{font-family:var(--mono);font-size:.8rem;min-height:120px}
     </div>
     <h2>Perfiles</h2>
     <div class="tablewrap"><table>
-      <thead><tr><th>Perfil</th><th class="num">Tramo (cm)</th><th class="num">Precio por tramo</th><th></th></tr></thead>
+      <thead><tr><th>Perfil</th><th>Línea</th><th>Clave Cuprum</th><th class="num">Tramo (cm)</th><th class="num">Precio por tramo</th><th></th></tr></thead>
       <tbody id="tbPerf"></tbody>
     </table></div>
     <div class="row"><button id="addPerf">+ Agregar perfil</button></div>
@@ -237,21 +237,67 @@ const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&g
 const fmt=(n,d=1)=>Number(n).toLocaleString('es-MX',{minimumFractionDigits:d,maximumFractionDigits:d});
 const money=n=>'$'+Number(n).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2});
 
+/* Catálogo Cuprum Línea Nacional 2" y 3" (claves de referencia del catálogo Cuprum; verifícalas con tu proveedor) */
+const CATALOGO=[
+  ['Cabezal 3"','3"','67836',610],['Riel 3"','3"','69957',610],['Riel adicional 3"','3"','',610],['Jamba 3"','3"','67826',610],
+  ['Cerco 3"','3"','67843',610],['Traslape 3"','3"','67844',610],['Zoclo 3"','3"','67835',610],['Zoclo puerta 3"','3"','67842',610],
+  ['Cerco chapa puerta 3"','3"','67847',610],['Traslape puerta 3"','3"','67848',460],['Cerco OXXO 3"','3"','67850',460],
+  ['Intermedio 3"','3"','69082',610],['Adaptador XX 3"','3"','7828',610],['Adaptador fijo 3"','3"','28681',610],['Tapa bolsa 3"','3"','10237',610],
+  ['Cabezal mosquitero corredizo 3"','3"','27862',610],['Riel mosquitero exterior 3"','3"','69272',610],['Cabezal mosquitero colgante 3"','3"','67862',610],
+  ['Jamba / chambrana 2"','2"','67518',610],['Riel 2"','2"','14286',610],['Riel adicional 2"','2"','',610],['Cabezal y zoclo 2"','2"','9956',610],
+  ['Cerco ventana 2"','2"','8320',610],['Traslape ventana 2"','2"','39954',610],['Cerco puerta 2"','2"','67821',460],['Traslape puerta 2"','2"','69955',610],
+  ['Zoclo puerta 2"','2"','67825',610],['Cerco fijo 2"','2"','27525',610],['Cerco OXXO puerta 2"','2"','67822',610],['Adaptador XX 2"','2"','7818',610],
+  ['Intermedio cuadrícula 2"','2"','11203',610],['Cabezal mosquitero corredizo 2"','2"','27819',610],['Riel mosquitero exterior 2"','2"','68370',610],
+  ['Cabezal mosquitero colgante 2"','2"','67819',610],
+  ['Mosquitero','Mosquitero','7333',610],['Cerco mosquitero','Mosquitero','66534',610],['Cabezal y zoclo mosquitero','Mosquitero','66533',610],
+  ['Adaptador mosquitero','Mosquitero','9966',610],['Mosquitero intermedio','Mosquitero','7101',610],['Adaptador OXXO','Otros','10220',610]
+].map(([nombre,linea,clave,tramo])=>({nombre,linea,clave,tramo,precio:0}));
+const LINEAS=['3"','2"','Mosquitero','Otros'];
+function tiposIniciales(){
+  const q=(perfil,base,desc,cant)=>({perfil,base,desc,cant});
+  const marco3=()=>[q('Cabezal 3"','A',0,1),q('Riel 3"','A',0,1),q('Riel adicional 3"','A',0,1),q('Jamba 3"','H',2.8,2),q('Jamba / chambrana 2"','A',0,1),q('Jamba / chambrana 2"','H',0,2)];
+  const marco2=()=>[q('Jamba / chambrana 2"','A',0,1),q('Riel 2"','A',0,1),q('Jamba / chambrana 2"','H',2.8,2)];
+  return [
+    {nombre:'Ventana corrediza 2 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',2.8,2),q('Traslape 3"','H',2.8,2),q('Zoclo 3"','A/2',3.3,4)]},
+    {nombre:'Ventana corrediza 3 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',2.8,2),q('Traslape 3"','H',2.8,4),q('Zoclo 3"','A/3',3.1,6)]},
+    {nombre:'Puerta corrediza 2 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco chapa puerta 3"','H',2.8,2),q('Traslape puerta 3"','H',2.8,2),q('Zoclo 3"','A/2',3.3,2),q('Zoclo puerta 3"','A/2',3.3,2)]},
+    {nombre:'Cancel de baño 2 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',2.8,2),q('Traslape 3"','H',2.8,2),q('Zoclo 3"','A/2',3.3,4)]},
+    {nombre:'Cancel 3 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',2.8,2),q('Traslape 3"','H',2.8,4),q('Zoclo 3"','A/3',3.1,6)]},
+    {nombre:'Ventana corrediza 2 hojas 2"',linea:'2"',piezas:[...marco2(),q('Cerco ventana 2"','H',2.8,2),q('Traslape ventana 2"','H',2.8,2),q('Cabezal y zoclo 2"','A/2',3.3,4)]},
+    {nombre:'Ventana corrediza 3 hojas 2"',linea:'2"',piezas:[...marco2(),q('Cerco ventana 2"','H',2.8,2),q('Traslape ventana 2"','H',2.8,4),q('Cabezal y zoclo 2"','A/3',3.1,6)]},
+    {nombre:'Puerta corrediza 2 hojas 2"',linea:'2"',piezas:[...marco2(),q('Cerco puerta 2"','H',2.8,2),q('Traslape puerta 2"','H',2.8,2),q('Cabezal y zoclo 2"','A/2',3.3,2),q('Zoclo puerta 2"','A/2',3.3,2)]},
+    {nombre:'Cancel de baño 2 hojas 2"',linea:'2"',piezas:[...marco2(),q('Cerco ventana 2"','H',2.8,2),q('Traslape ventana 2"','H',2.8,2),q('Cabezal y zoclo 2"','A/2',3.3,4)]},
+    /* Doble corrediza (4 hojas, O-X-X-O): las 2 hojas del centro se encuentran con cerco OXXO + adaptador OXXO */
+    {nombre:'Ventana doble corrediza 4 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',2.8,2),q('Traslape 3"','H',2.8,4),q('Cerco OXXO 3"','H',2.8,2),q('Adaptador OXXO','H',2.8,1),q('Zoclo 3"','A/4',3.0,8)]},
+    {nombre:'Cancel doble corrediza 4 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',2.8,2),q('Traslape 3"','H',2.8,4),q('Cerco OXXO 3"','H',2.8,2),q('Adaptador OXXO','H',2.8,1),q('Zoclo 3"','A/4',3.0,8)]},
+    {nombre:'Puerta doble corrediza 4 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco chapa puerta 3"','H',2.8,2),q('Traslape puerta 3"','H',2.8,4),q('Cerco OXXO 3"','H',2.8,2),q('Adaptador OXXO','H',2.8,1),q('Zoclo 3"','A/4',3.0,4),q('Zoclo puerta 3"','A/4',3.0,4)]},
+    {nombre:'Ventana doble corrediza 4 hojas 2"',linea:'2"',piezas:[...marco2(),q('Cerco ventana 2"','H',2.8,2),q('Traslape ventana 2"','H',2.8,4),q('Cerco OXXO puerta 2"','H',2.8,2),q('Adaptador OXXO','H',2.8,1),q('Cabezal y zoclo 2"','A/4',3.0,8)]},
+    {nombre:'Cancel doble corrediza 4 hojas 2"',linea:'2"',piezas:[...marco2(),q('Cerco ventana 2"','H',2.8,2),q('Traslape ventana 2"','H',2.8,4),q('Cerco OXXO puerta 2"','H',2.8,2),q('Adaptador OXXO','H',2.8,1),q('Cabezal y zoclo 2"','A/4',3.0,8)]},
+    {nombre:'Puerta doble corrediza 4 hojas 2"',linea:'2"',piezas:[...marco2(),q('Cerco puerta 2"','H',2.8,2),q('Traslape puerta 2"','H',2.8,4),q('Cerco OXXO puerta 2"','H',2.8,2),q('Adaptador OXXO','H',2.8,1),q('Cabezal y zoclo 2"','A/4',3.0,4),q('Zoclo puerta 2"','A/4',3.0,4)]}
+  ];
+}
 function configInicial(){
-  const P=(n)=>({nombre:n,tramo:610,precio:0});
-  const marco=[{perfil:'Cabezal',base:'A',desc:0,cant:1},{perfil:'Riel',base:'A',desc:0,cant:1},{perfil:'Jamba',base:'H',desc:2.8,cant:2}];
-  const hoja2=[{perfil:'Cerco',base:'H',desc:2.8,cant:2},{perfil:'Traslape',base:'H',desc:2.8,cant:2},{perfil:'Zoclo',base:'A/2',desc:3.3,cant:4}];
-  const hoja3=[{perfil:'Cerco',base:'H',desc:2.8,cant:2},{perfil:'Traslape',base:'H',desc:2.8,cant:4},{perfil:'Zoclo',base:'A/3',desc:3.1,cant:6}];
-  const c=x=>JSON.parse(JSON.stringify(x));
-  return {kerf:0.4,minUtil:30,prueba:{A:150,H:120},
-    perfiles:['Cabezal','Riel','Jamba','Cerco','Traslape','Zoclo','Zoclo puerta'].map(P),
-    tipos:[
-      {nombre:'Ventana corrediza 2 hojas',piezas:[...c(marco),...c(hoja2)]},
-      {nombre:'Ventana corrediza 3 hojas',piezas:[...c(marco),...c(hoja3)]},
-      {nombre:'Puerta corrediza 2 hojas',piezas:[...c(marco),{perfil:'Cerco',base:'H',desc:2.8,cant:2},{perfil:'Traslape',base:'H',desc:2.8,cant:2},{perfil:'Zoclo',base:'A/2',desc:3.3,cant:2},{perfil:'Zoclo puerta',base:'A/2',desc:3.3,cant:2}]},
-      {nombre:'Cancel de baño 2 hojas',piezas:[...c(marco),...c(hoja2)]},
-      {nombre:'Cancel 3 hojas',piezas:[...c(marco),...c(hoja3)]}
-    ]};
+  return {version:3,kerf:0.4,minUtil:30,prueba:{A:150,H:120},perfiles:CATALOGO.map(p=>({...p})),tipos:tiposIniciales()};
+}
+/* Pasa una configuración anterior (solo 3") al catálogo completo, sin perder descuentos ni precios ya capturados */
+function migrarCatalogo(){
+  const c=D.config;if((c.version||1)>=3)return false;
+  if((c.version||1)===2){tiposIniciales().forEach(t=>{if(!c.tipos.some(x=>x.nombre===t.nombre))c.tipos.push(t)});c.version=3;return {invCambio:false,renTipo:{}}}
+  const ren={'Cabezal':'Cabezal 3"','Riel':'Riel 3"','Jamba':'Jamba 3"','Cerco':'Cerco 3"','Traslape':'Traslape 3"','Zoclo':'Zoclo 3"','Zoclo puerta':'Zoclo puerta 3"'};
+  const precio={};c.perfiles.forEach(p=>{const n=ren[p.nombre]||p.nombre;precio[n]=p;});
+  c.perfiles=[...CATALOGO.map(p=>({...p,precio:+(precio[p.nombre]?.precio)||0,tramo:+(precio[p.nombre]?.tramo)||p.tramo})),
+    ...c.perfiles.filter(p=>!ren[p.nombre]&&!CATALOGO.some(k=>k.nombre===p.nombre)).map(p=>({...p,linea:p.linea||'Otros',clave:p.clave||''}))];
+  let invCambio=false;D.inventario.forEach(x=>{if(ren[x.perfil]){x.perfil=ren[x.perfil];invCambio=true}});
+  const renTipo={};
+  c.tipos.forEach(t=>{t.piezas.forEach(p=>{if(ren[p.perfil])p.perfil=ren[p.perfil]});
+    if(!/[23]"$/.test(t.nombre)){const n=t.nombre+' 3"';renTipo[t.nombre]=n;t.nombre=n}t.linea??='3"';
+    if(t.linea==='3"'){
+      if(!t.piezas.some(p=>p.perfil==='Riel adicional 3"'))t.piezas.splice(2,0,{perfil:'Riel adicional 3"',base:'A',desc:0,cant:1});
+      if(!t.piezas.some(p=>p.perfil==='Jamba / chambrana 2"'))t.piezas.splice(4,0,{perfil:'Jamba / chambrana 2"',base:'A',desc:0,cant:1},{perfil:'Jamba / chambrana 2"',base:'H',desc:0,cant:2});
+    }});
+  tiposIniciales().forEach(t=>{if(!c.tipos.some(x=>x.nombre===t.nombre))c.tipos.push(t)});
+  c.version=3;
+  return {invCambio,renTipo};
 }
 
 /* ---------- estado ---------- */
@@ -312,7 +358,10 @@ async function refrescar(silencioso){
   }catch(e){if(!silencioso)throw e;status('Sin conexión con el taller','bad')}
 }
 function normalizar(){
-  const c=D.config;c.prueba??={A:150,H:120};c.kerf??=0.4;c.minUtil??=30;
+  const mig=migrarCatalogo();
+  if(mig){D.obras.forEach(o=>{let ch=false;(o.ventanas||[]).forEach(v=>{if(mig.renTipo[v.tipo]){v.tipo=mig.renTipo[v.tipo];ch=true}});if(ch)guardarObra(o)});
+    guardarCfg();if(mig.invCambio)guardarInv()}
+  const c=D.config;c.perfiles.forEach(p=>{p.linea??='Otros';p.clave??=''});c.tipos.forEach(t=>{t.linea??=(/2"$/.test(t.nombre)?'2"':'3"')});c.prueba??={A:150,H:120};c.kerf??=0.4;c.minUtil??=30;
   c.tipos.forEach(t=>t.piezas.forEach(p=>{if(!p.base)p.base='F'}));
   D.obras.forEach(o=>{o.ventanas??=[];o.estado??='pendiente';delete o['respon'+'sable'];delete o.por;
     if(!o.fecha){const d=new Date(o.creada||Date.now());o.fecha=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}});
@@ -356,7 +405,7 @@ function renderObraEd(){
       <thead><tr><th>Nombre de la ventana</th><th>Tipo</th><th class="num">Ancho</th><th class="num">Alto</th><th class="num">Cant.</th><th></th></tr></thead>
       <tbody id="tbVen">${o.ventanas.map((v,i)=>`<tr>
         <td><input id="vn${i}" data-k="nombre" data-i="${i}" value="${esc(v.nombre)}" placeholder="Ej. Ventana cocina" style="font-weight:600;min-width:150px"></td>
-        <td><select id="vt${i}" data-k="tipo" data-i="${i}">${D.config.tipos.map(x=>`<option${x.nombre===v.tipo?' selected':''}>${esc(x.nombre)}</option>`).join('')}</select></td>
+        <td><select id="vt${i}" data-k="tipo" data-i="${i}">${tipoOpts(v.tipo)}</select></td>
         <td class="num"><input class="w-s" id="va${i}" type="number" step="0.1" data-k="ancho" data-i="${i}" value="${v.ancho}"></td>
         <td class="num"><input class="w-s" id="vh${i}" type="number" step="0.1" data-k="alto" data-i="${i}" value="${v.alto}"></td>
         <td class="num"><input class="w-s" id="vc${i}" type="number" min="1" step="1" data-k="cant" data-i="${i}" value="${v.cant}"></td>
@@ -383,7 +432,10 @@ $('#obraEd').addEventListener('click',e=>{const o=D.obras.find(x=>x.id===obraSel
   else if(t.id==='borrarSi'){D.obras=D.obras.filter(x=>x.id!==o.id);encolar('obra',o.id,null,'borrar');obraSel=null;renderObras()}});
 
 /* ---------- INVENTARIO ---------- */
-function perfOpts(sel){return D.config.perfiles.map(p=>`<option${p.nombre===sel?' selected':''}>${esc(p.nombre)}</option>`).join('')}
+function perfOpts(sel){const P=D.config.perfiles;const ls_=[...LINEAS,...new Set(P.map(p=>p.linea).filter(l=>!LINEAS.includes(l)))];
+  return ls_.map(l=>{const g=P.filter(p=>(p.linea||'Otros')===l);return g.length?`<optgroup label="${esc(l==='Mosquitero'||l==='Otros'?l:'Línea '+l)}">${g.map(p=>`<option${p.nombre===sel?' selected':''}>${esc(p.nombre)}</option>`).join('')}</optgroup>`:''}).join('')+(sel&&!P.some(p=>p.nombre===sel)?`<option selected>${esc(sel)}</option>`:'')}
+function tipoOpts(sel){const T=D.config.tipos;return ['3"','2"','Otros'].map(l=>{const g=T.filter(t=>(['3"','2"'].includes(t.linea)?t.linea:'Otros')===l);
+  return g.length?`<optgroup label="${l==='Otros'?'Otros':'Línea '+l}">${g.slice().sort((a,b)=>a.nombre.localeCompare(b.nombre,'es')).map(t=>`<option${t.nombre===sel?' selected':''}>${esc(t.nombre)}</option>`).join('')}</optgroup>`:''}).join('')+(sel&&!T.some(t=>t.nombre===sel)?`<option selected>${esc(sel)}</option>`:'')}
 function renderInv(){
   $('#tbInv').innerHTML=D.inventario.map((t,i)=>`<tr>
     <td><select id="ip${i}" data-k="perfil" data-i="${i}">${perfOpts(t.perfil)}</select></td>
@@ -480,12 +532,14 @@ $('#aplicarSi').onclick=async()=>{
 function renderForm(){
   const C=D.config;$('#kerf').value=C.kerf;$('#minUtil').value=C.minUtil;$('#pA').value=C.prueba.A;$('#pH').value=C.prueba.H;
   $('#tbPerf').innerHTML=C.perfiles.map((p,i)=>`<tr>
-    <td><input id="pn${i}" data-k="nombre" data-i="${i}" value="${esc(p.nombre)}"></td>
+    <td><input id="pn${i}" data-k="nombre" data-i="${i}" value="${esc(p.nombre)}" style="min-width:190px"></td>
+    <td><select id="pl${i}" data-k="linea" data-i="${i}" style="width:120px">${LINEAS.map(l=>`<option${l===p.linea?' selected':''}>${l}</option>`).join('')}</select></td>
+    <td><input class="w-m" id="pc${i}" data-k="clave" data-i="${i}" value="${esc(p.clave)}"></td>
     <td class="num"><input class="w-m" id="pt${i}" type="number" step="1" data-k="tramo" data-i="${i}" value="${p.tramo}"></td>
     <td class="num"><input class="w-m" id="pp${i}" type="number" step="0.01" data-k="precio" data-i="${i}" value="${p.precio}"></td>
     <td><button class="x" data-del="${i}" aria-label="Quitar">×</button></td></tr>`).join('');
   $('#tipos').innerHTML=C.tipos.map((t,ti)=>`<div class="tipo-card">
-    <div class="row"><input id="ty${ti}" data-tk="nombre" data-ti="${ti}" value="${esc(t.nombre)}" style="flex:1;font-weight:600"><button class="x" data-deltipo="${ti}" aria-label="Quitar tipo">×</button></div>
+    <div class="row"><input id="ty${ti}" data-tk="nombre" data-ti="${ti}" value="${esc(t.nombre)}" style="flex:1;font-weight:600"><select id="tl${ti}" data-tl="1" data-ti="${ti}" style="width:110px" aria-label="Línea">${['3"','2"'].map(l=>`<option${l===t.linea?' selected':''}>${l}</option>`).join('')}</select><button class="x" data-deltipo="${ti}" aria-label="Quitar tipo">×</button></div>
     <div class="tablewrap"><table><thead><tr><th>Perfil</th><th>Se mide sobre</th><th class="num">Menos (cm)</th><th class="num">Piezas</th><th class="num">Prueba ${fmt(C.prueba.A,0)}×${fmt(C.prueba.H,0)}</th><th></th></tr></thead><tbody>
     ${t.piezas.map((p,pi)=>{const v=evalPieza(p,+C.prueba.A,+C.prueba.H);return `<tr>
       <td><select id="fp${ti}_${pi}" data-ti="${ti}" data-pi="${pi}" data-pk="perfil">${perfOpts(p.perfil)}</select></td>
@@ -503,12 +557,14 @@ $('#pH').onchange=e=>{D.config.prueba.H=parseFloat(e.target.value)||0;guardarCfg
 $('#tbPerf').addEventListener('input',e=>{const el=e.target,i=el.dataset.i;if(i==null)return;const p=D.config.perfiles[i];
   if(el.dataset.k==='nombre'){const old=p.nombre;p.nombre=el.value;D.config.tipos.forEach(t=>t.piezas.forEach(x=>{if(x.perfil===old)x.perfil=el.value}));
     let inv=false;D.inventario.forEach(x=>{if(x.perfil===old){x.perfil=el.value;inv=true}});if(inv)guardarInv()}
+  else if(el.dataset.k==='linea'||el.dataset.k==='clave')p[el.dataset.k]=el.value;
   else p[el.dataset.k]=parseFloat(el.value)||0;guardarCfg()});
 $('#tbPerf').addEventListener('click',e=>{const d=e.target.dataset.del;if(d==null)return;D.config.perfiles.splice(+d,1);guardarCfg();renderForm()});
-$('#addPerf').onclick=()=>{D.config.perfiles.push({nombre:'Nuevo perfil',tramo:610,precio:0});guardarCfg();renderForm()};
-$('#addTipo').onclick=()=>{D.config.tipos.push({nombre:'Nuevo tipo',piezas:[{perfil:D.config.perfiles[0]?.nombre||'',base:'A',desc:0,cant:1}]});guardarCfg();renderForm()};
+$('#addPerf').onclick=()=>{D.config.perfiles.push({nombre:'Nuevo perfil',linea:'3"',clave:'',tramo:610,precio:0});guardarCfg();renderForm()};
+$('#addTipo').onclick=()=>{D.config.tipos.push({nombre:'Nuevo tipo',linea:'3"',piezas:[{perfil:D.config.perfiles[0]?.nombre||'',base:'A',desc:0,cant:1}]});guardarCfg();renderForm()};
 $('#tipos').addEventListener('input',e=>{const el=e.target,ti=el.dataset.ti;if(ti==null)return;const C=D.config;
-  if(el.dataset.tk){const old=C.tipos[ti].nombre;C.tipos[ti].nombre=el.value;D.obras.forEach(o=>{let ch=false;o.ventanas.forEach(v=>{if(v.tipo===old){v.tipo=el.value;ch=true}});if(ch)guardarObra(o)})}
+  if(el.dataset.tl){C.tipos[ti].linea=el.value}
+  else if(el.dataset.tk){const old=C.tipos[ti].nombre;C.tipos[ti].nombre=el.value;D.obras.forEach(o=>{let ch=false;o.ventanas.forEach(v=>{if(v.tipo===old){v.tipo=el.value;ch=true}});if(ch)guardarObra(o)})}
   else{const p=C.tipos[ti].piezas[el.dataset.pi];p[el.dataset.pk]=el.type==='number'?(parseFloat(el.value)||0):el.value;
     if(el.dataset.pk==='base'){guardarCfg();renderForm();return}
     const v=evalPieza(p,+C.prueba.A,+C.prueba.H);el.closest('tr').querySelector('.prueba').textContent=isNaN(v)?'—':fmt(v);

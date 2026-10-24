@@ -110,6 +110,29 @@ textarea{font-family:var(--mono);font-size:.8rem;min-height:120px}
 .login{max-width:440px;margin:40px auto}
 .empty{padding:30px;text-align:center;color:var(--muted)}
 @media (max-width:760px){.obras-layout{grid-template-columns:1fr}.bar{grid-template-columns:1fr;gap:3px}h1{font-size:1.9rem}}
+.print-head{display:none}
+@media print{
+  @page{size:letter;margin:12mm}
+  *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+  :root{--bg:#fff;--panel:#fff;--fg:#111;--muted:#555;--line:#ccc;color-scheme:light}
+  body{padding:0;font-size:11pt;background:#fff}
+  .ruler,.top .row,nav.tabs,#login,[data-view]:not([data-view="resultado"]),#errores:empty,button,.note,.hoja-link,#confirmBox{display:none!important}
+  [data-view="resultado"]{display:flex!important}
+  .no-print,header{display:none!important}
+  .print-head{display:block;font-size:10pt;color:#333;border-bottom:2px solid #8a5a1c;padding-bottom:6px}
+  .panel{border:0;padding:0;break-inside:auto}
+  h2{font-size:15pt;border-bottom:1px solid #8a5a1c;padding-bottom:2px;break-after:avoid}
+  .desp,.bar,tr,.perfil-head{break-inside:avoid}
+  .desp-obra{break-inside:auto}
+  .tiles{grid-template-columns:repeat(4,1fr)}
+  .tile b{font-size:16pt}
+  .desp-grid{grid-template-columns:repeat(2,1fr)}
+  .bar{grid-template-columns:160px 1fr}
+  .desp-obra>h3,.perfil-head{break-after:avoid}
+  .desp-obra>h3{break-inside:avoid}
+  .desp-grid{break-before:avoid}
+  .track{height:30px}
+}
 </style>
 </head>
 <body>
@@ -168,7 +191,8 @@ textarea{font-family:var(--mono);font-size:.8rem;min-height:120px}
 
   <!-- RESULTADO -->
   <section data-view="resultado" hidden style="display:flex;flex-direction:column;gap:16px">
-    <div class="panel">
+    <div class="print-head" id="printHead"></div>
+    <div class="panel no-print">
       <h2>Obras a calcular</h2>
       <p class="hint">Calcula varias obras juntas para aprovechar mejor cada tramo. El material del taller se reparte entre las obras marcadas.</p>
       <div class="sel-obras" id="selObras"></div>
@@ -176,7 +200,7 @@ textarea{font-family:var(--mono);font-size:.8rem;min-height:120px}
     <div id="errores"></div>
     <div class="tiles" id="tiles"></div>
     <div class="panel">
-      <div class="row" style="justify-content:space-between"><h2>Lista de compra</h2><span class="row"><button class="primary" id="guardarHoja">Guardar en mi hoja de Google</button><button id="copyCompra">Copiar lista</button></span></div>
+      <div class="row" style="justify-content:space-between"><h2>Lista de compra</h2><span class="row"><button class="primary" id="guardarHoja">Guardar en mi hoja de Google</button><button id="imprimir">Imprimir</button><button id="copyCompra">Copiar lista</button></span></div>
       <span class="row"><span class="note" id="hojaMsg" role="status" hidden></span><a class="hoja-link" id="linkHoja2" href="#" target="_blank" rel="noopener" hidden>Ver en la hoja ↗</a></span>
       <div class="tablewrap"><table>
         <thead><tr><th>Perfil</th><th class="num">Metros necesarios</th><th class="num">Del taller</th><th class="num">Tramos a comprar</th><th class="num">Costo</th></tr></thead>
@@ -194,7 +218,7 @@ textarea{font-family:var(--mono);font-size:.8rem;min-height:120px}
       <p class="hint">Cada barra es un tramo. <span class="chip inv">Taller</span> = material que ya hay, <span class="chip new">Comprar</span> = tramo nuevo. Corta de izquierda a derecha.</p>
       <div id="planes"></div>
     </div>
-    <div class="panel">
+    <div class="panel no-print">
       <h3>Después de cortar</h3>
       <p class="hint">Cuando ya estén hechos estos cortes, marca las obras como cortadas. El inventario del taller se actualiza: se quitan las piezas usadas y se agregan los sobrantes útiles.</p>
       <div class="row"><button id="aplicar">Marcar como cortadas y actualizar material</button>
@@ -262,53 +286,75 @@ const CATALOGO=[
 ].map(([nombre,linea,clave,tramo])=>({nombre,linea,clave,tramo,precio:0}));
 const LINEAS=['3"','2"','1 3/4"','Mosquitero','Otros'];
 function tiposIniciales(){
-  const q=(perfil,base,desc,cant)=>({perfil,base,desc,cant});
+  const q=(perfil,base,desc,cant,nota)=>nota?{perfil,base,desc,cant,nota}:{perfil,base,desc,cant};
+  const f=(perfil,formula,cant,nota)=>nota?{perfil,base:'F',formula,desc:0,cant,nota}:{perfil,base:'F',formula,desc:0,cant};
+  const FIJA='hoja fija',CORRE='hoja que corre';
   const marco3=()=>[q('Cabezal 3"','A',0,1),q('Riel 3"','A',0,1),q('Riel adicional 3"','A',0,1),q('Jamba 3"','H',2.8,2)];
   const marco2=()=>[q('Jamba / chambrana 2"','A',0,1),q('Riel 2"','A',0,1),q('Jamba / chambrana 2"','H',2.8,2)];
+  /* Regla del taller: cerco y traslape de hoja fija = alto − 3 cm; de hoja que corre = alto − 4 cm.
+     Zoclo 3": 2 hojas = (ancho − 18) ÷ 2 ; 3 hojas = (ancho − 23.2) ÷ 3 */
   return [
-    {nombre:'Ventana corrediza 2 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',2.8,2),q('Traslape 3"','H',2.8,2),q('Zoclo 3"','A/2',3.3,4)]},
-    {nombre:'Ventana corrediza 3 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',2.8,2),q('Traslape 3"','H',2.8,4),q('Zoclo 3"','A/3',3.1,6)]},
-    {nombre:'Puerta corrediza 2 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco chapa puerta 3"','H',2.8,2),q('Traslape puerta 3"','H',2.8,2),q('Zoclo 3"','A/2',3.3,2),q('Zoclo puerta 3"','A/2',3.3,2)]},
-    {nombre:'Cancel de baño 2 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',2.8,2),q('Traslape 3"','H',2.8,2),q('Zoclo 3"','A/2',3.3,4)]},
-    {nombre:'Cancel 3 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',2.8,2),q('Traslape 3"','H',2.8,4),q('Zoclo 3"','A/3',3.1,6)]},
-    {nombre:'Ventana corrediza 2 hojas 2"',linea:'2"',piezas:[...marco2(),q('Cerco ventana 2"','H',2.8,2),q('Traslape ventana 2"','H',2.8,2),q('Cabezal y zoclo 2"','A/2',3.3,4)]},
-    {nombre:'Ventana corrediza 3 hojas 2"',linea:'2"',piezas:[...marco2(),q('Cerco ventana 2"','H',2.8,2),q('Traslape ventana 2"','H',2.8,4),q('Cabezal y zoclo 2"','A/3',3.1,6)]},
-    {nombre:'Puerta corrediza 2 hojas 2"',linea:'2"',piezas:[...marco2(),q('Cerco puerta 2"','H',2.8,2),q('Traslape puerta 2"','H',2.8,2),q('Cabezal y zoclo 2"','A/2',3.3,2),q('Zoclo puerta 2"','A/2',3.3,2)]},
-    {nombre:'Cancel de baño 2 hojas 2"',linea:'2"',piezas:[...marco2(),q('Cerco ventana 2"','H',2.8,2),q('Traslape ventana 2"','H',2.8,2),q('Cabezal y zoclo 2"','A/2',3.3,4)]},
-    /* Doble corrediza (4 hojas, O-X-X-O): las 2 hojas del centro se encuentran con cerco OXXO + adaptador OXXO */
-    {nombre:'Ventana doble corrediza 4 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',2.8,2),q('Traslape 3"','H',2.8,4),q('Cerco OXXO 3"','H',2.8,2),q('Adaptador OXXO','H',2.8,1),q('Zoclo 3"','A/4',3.0,8)]},
-    {nombre:'Cancel doble corrediza 4 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',2.8,2),q('Traslape 3"','H',2.8,4),q('Cerco OXXO 3"','H',2.8,2),q('Adaptador OXXO','H',2.8,1),q('Zoclo 3"','A/4',3.0,8)]},
-    {nombre:'Puerta doble corrediza 4 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco chapa puerta 3"','H',2.8,2),q('Traslape puerta 3"','H',2.8,4),q('Cerco OXXO 3"','H',2.8,2),q('Adaptador OXXO','H',2.8,1),q('Zoclo 3"','A/4',3.0,4),q('Zoclo puerta 3"','A/4',3.0,4)]},
-    {nombre:'Ventana doble corrediza 4 hojas 2"',linea:'2"',piezas:[...marco2(),q('Cerco ventana 2"','H',2.8,2),q('Traslape ventana 2"','H',2.8,4),q('Cerco OXXO puerta 2"','H',2.8,2),q('Adaptador OXXO','H',2.8,1),q('Cabezal y zoclo 2"','A/4',3.0,8)]},
-    {nombre:'Cancel doble corrediza 4 hojas 2"',linea:'2"',piezas:[...marco2(),q('Cerco ventana 2"','H',2.8,2),q('Traslape ventana 2"','H',2.8,4),q('Cerco OXXO puerta 2"','H',2.8,2),q('Adaptador OXXO','H',2.8,1),q('Cabezal y zoclo 2"','A/4',3.0,8)]},
+    {nombre:'Ventana doble corrediza 2 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',4,2,CORRE),q('Traslape 3"','H',4,2,CORRE),f('Zoclo 3"','(A-18)/2',4)]},
+    {nombre:'Ventana corrediza 2 hojas, 1 fija 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',3,1,FIJA),q('Traslape 3"','H',3,1,FIJA),q('Cerco 3"','H',4,1,CORRE),q('Traslape 3"','H',4,1,CORRE),f('Zoclo 3"','(A-18)/2',4)]},
+    {nombre:'Ventana triple corrediza 3 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',4,2,CORRE),q('Traslape 3"','H',4,4,CORRE),f('Zoclo 3"','(A-23.2)/3',6)]},
+    {nombre:'Puerta corrediza 2 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco chapa puerta 3"','H',4,2,CORRE),q('Traslape puerta 3"','H',4,2,CORRE),f('Zoclo 3"','(A-18)/2',2),f('Zoclo puerta 3"','(A-18)/2',2)]},
+    {nombre:'Cancel de baño 2 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',4,2,CORRE),q('Traslape 3"','H',4,2,CORRE),f('Zoclo 3"','(A-18)/2',4)]},
+    {nombre:'Cancel triple corrediza 3 hojas 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',4,2,CORRE),q('Traslape 3"','H',4,4,CORRE),f('Zoclo 3"','(A-23.2)/3',6)]},
+    {nombre:'Ventana 4 hojas O-X-X-O 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',3,2,FIJA),q('Traslape 3"','H',3,2,FIJA),q('Traslape 3"','H',4,2,CORRE),q('Cerco OXXO 3"','H',4,2,CORRE),q('Adaptador OXXO','H',4,1,CORRE),q('Zoclo 3"','A/4',3.0,8)]},
+    {nombre:'Cancel 4 hojas O-X-X-O 3"',linea:'3"',piezas:[...marco3(),q('Cerco 3"','H',3,2,FIJA),q('Traslape 3"','H',3,2,FIJA),q('Traslape 3"','H',4,2,CORRE),q('Cerco OXXO 3"','H',4,2,CORRE),q('Adaptador OXXO','H',4,1,CORRE),q('Zoclo 3"','A/4',3.0,8)]},
+    {nombre:'Puerta 4 hojas O-X-X-O 3"',linea:'3"',piezas:[...marco3(),q('Cerco chapa puerta 3"','H',3,2,FIJA),q('Traslape puerta 3"','H',3,2,FIJA),q('Traslape puerta 3"','H',4,2,CORRE),q('Cerco OXXO 3"','H',4,2,CORRE),q('Adaptador OXXO','H',4,1,CORRE),q('Zoclo 3"','A/4',3.0,4),q('Zoclo puerta 3"','A/4',3.0,4)]},
+    {nombre:'Ventana doble corrediza 2 hojas 2"',linea:'2"',piezas:[...marco2(),q('Cerco ventana 2"','H',4,2,CORRE),q('Traslape ventana 2"','H',4,2,CORRE),q('Cabezal y zoclo 2"','A/2',3.3,4)]},
+    {nombre:'Ventana corrediza 2 hojas, 1 fija 2"',linea:'2"',piezas:[...marco2(),q('Cerco ventana 2"','H',3,1,FIJA),q('Traslape ventana 2"','H',3,1,FIJA),q('Cerco ventana 2"','H',4,1,CORRE),q('Traslape ventana 2"','H',4,1,CORRE),q('Cabezal y zoclo 2"','A/2',3.3,4)]},
+    {nombre:'Ventana triple corrediza 3 hojas 2"',linea:'2"',piezas:[...marco2(),q('Cerco ventana 2"','H',4,2,CORRE),q('Traslape ventana 2"','H',4,4,CORRE),q('Cabezal y zoclo 2"','A/3',3.1,6)]},
+    {nombre:'Puerta corrediza 2 hojas 2"',linea:'2"',piezas:[...marco2(),q('Cerco puerta 2"','H',4,2,CORRE),q('Traslape puerta 2"','H',4,2,CORRE),q('Cabezal y zoclo 2"','A/2',3.3,2),q('Zoclo puerta 2"','A/2',3.3,2)]},
+    {nombre:'Cancel de baño 2 hojas 2"',linea:'2"',piezas:[...marco2(),q('Cerco ventana 2"','H',4,2,CORRE),q('Traslape ventana 2"','H',4,2,CORRE),q('Cabezal y zoclo 2"','A/2',3.3,4)]},
+    {nombre:'Ventana 4 hojas O-X-X-O 2"',linea:'2"',piezas:[...marco2(),q('Cerco ventana 2"','H',3,2,FIJA),q('Traslape ventana 2"','H',3,2,FIJA),q('Traslape ventana 2"','H',4,2,CORRE),q('Cerco OXXO puerta 2"','H',4,2,CORRE),q('Adaptador OXXO','H',4,1,CORRE),q('Cabezal y zoclo 2"','A/4',3.0,8)]},
+    {nombre:'Cancel 4 hojas O-X-X-O 2"',linea:'2"',piezas:[...marco2(),q('Cerco ventana 2"','H',3,2,FIJA),q('Traslape ventana 2"','H',3,2,FIJA),q('Traslape ventana 2"','H',4,2,CORRE),q('Cerco OXXO puerta 2"','H',4,2,CORRE),q('Adaptador OXXO','H',4,1,CORRE),q('Cabezal y zoclo 2"','A/4',3.0,8)]},
+    {nombre:'Puerta 4 hojas O-X-X-O 2"',linea:'2"',piezas:[...marco2(),q('Cerco puerta 2"','H',3,2,FIJA),q('Traslape puerta 2"','H',3,2,FIJA),q('Traslape puerta 2"','H',4,2,CORRE),q('Cerco OXXO puerta 2"','H',4,2,CORRE),q('Adaptador OXXO','H',4,1,CORRE),q('Cabezal y zoclo 2"','A/4',3.0,4),q('Zoclo puerta 2"','A/4',3.0,4)]},
     /* Puertas abatibles (que abren), puerta batiente 1 3/4" Cuprum. Marco a inglete (45°) a medida total. */
     {nombre:'Puerta abatible 2 hojas 1 3/4"',linea:'1 3/4"',piezas:[q('Marco puerta abatible 1 3/4"','A',0,1),q('Marco puerta abatible 1 3/4"','H',0,2),
       q('Hoja exterior (larguero) 1 3/4"','H',3.0,4),q('Hoja interior (cabezal de hoja) 1 3/4"','A/2',8.0,2),q('Travesaño intermedio 1 3/4"','A/2',8.0,2),q('Zoclo puerta abatible 1 3/4"','A/2',8.0,2)]},
     {nombre:'Puerta abatible 1 hoja 1 3/4"',linea:'1 3/4"',piezas:[q('Marco puerta abatible 1 3/4"','A',0,1),q('Marco puerta abatible 1 3/4"','H',0,2),
-      q('Hoja exterior (larguero) 1 3/4"','H',3.0,2),q('Hoja interior (cabezal de hoja) 1 3/4"','A',13.0,1),q('Travesaño intermedio 1 3/4"','A',13.0,1),q('Zoclo puerta abatible 1 3/4"','A',13.0,1)]},
-    {nombre:'Puerta doble corrediza 4 hojas 2"',linea:'2"',piezas:[...marco2(),q('Cerco puerta 2"','H',2.8,2),q('Traslape puerta 2"','H',2.8,4),q('Cerco OXXO puerta 2"','H',2.8,2),q('Adaptador OXXO','H',2.8,1),q('Cabezal y zoclo 2"','A/4',3.0,4),q('Zoclo puerta 2"','A/4',3.0,4)]}
+      q('Hoja exterior (larguero) 1 3/4"','H',3.0,2),q('Hoja interior (cabezal de hoja) 1 3/4"','A',13.0,1),q('Travesaño intermedio 1 3/4"','A',13.0,1),q('Zoclo puerta abatible 1 3/4"','A',13.0,1)]}
   ];
 }
 function configInicial(){
-  return {version:5,kerf:0.4,minUtil:30,prueba:{A:150,H:120},perfiles:CATALOGO.map(p=>({...p})),tipos:tiposIniciales()};
+  return {version:7,kerf:0.4,minUtil:30,prueba:{A:150,H:120},perfiles:CATALOGO.map(p=>({...p})),tipos:tiposIniciales()};
 }
 /* Pasa una configuración anterior (solo 3") al catálogo completo, sin perder descuentos ni precios ya capturados */
+const REN_4H={'Ventana doble corrediza 4 hojas 3"':'Ventana 4 hojas O-X-X-O 3"','Cancel doble corrediza 4 hojas 3"':'Cancel 4 hojas O-X-X-O 3"','Puerta doble corrediza 4 hojas 3"':'Puerta 4 hojas O-X-X-O 3"',
+  'Ventana doble corrediza 4 hojas 2"':'Ventana 4 hojas O-X-X-O 2"','Cancel doble corrediza 4 hojas 2"':'Cancel 4 hojas O-X-X-O 2"','Puerta doble corrediza 4 hojas 2"':'Puerta 4 hojas O-X-X-O 2"'};
+const esVerticalHoja=p=>p.base==='H'&&(/^(Cerco|Traslape)/.test(p.perfil)||p.perfil==='Adaptador OXXO');
 function migrarCatalogo(){
-  const c=D.config;const V=5;if((c.version||1)>=V)return false;
-  if((c.version||1)>=2){c.tipos.forEach(t=>{if(t.linea==='3"')t.piezas=t.piezas.filter(p=>p.perfil!=='Jamba / chambrana 2"')});
-    CATALOGO.forEach(k=>{if(!c.perfiles.some(p=>p.nombre===k.nombre))c.perfiles.push({...k})});
-    tiposIniciales().forEach(t=>{if(!c.tipos.some(x=>x.nombre===t.nombre))c.tipos.push(t)});c.version=V;return {invCambio:false,renTipo:{}}}
-  const ren={'Cabezal':'Cabezal 3"','Riel':'Riel 3"','Jamba':'Jamba 3"','Cerco':'Cerco 3"','Traslape':'Traslape 3"','Zoclo':'Zoclo 3"','Zoclo puerta':'Zoclo puerta 3"'};
-  const precio={};c.perfiles.forEach(p=>{const n=ren[p.nombre]||p.nombre;precio[n]=p;});
-  c.perfiles=[...CATALOGO.map(p=>({...p,precio:+(precio[p.nombre]?.precio)||0,tramo:+(precio[p.nombre]?.tramo)||p.tramo})),
-    ...c.perfiles.filter(p=>!ren[p.nombre]&&!CATALOGO.some(k=>k.nombre===p.nombre)).map(p=>({...p,linea:p.linea||'Otros',clave:p.clave||''}))];
-  let invCambio=false;D.inventario.forEach(x=>{if(ren[x.perfil]){x.perfil=ren[x.perfil];invCambio=true}});
-  const renTipo={};
-  c.tipos.forEach(t=>{t.piezas.forEach(p=>{if(ren[p.perfil])p.perfil=ren[p.perfil]});
-    if(!/[23]"$/.test(t.nombre)){const n=t.nombre+' 3"';renTipo[t.nombre]=n;t.nombre=n}t.linea??='3"';
-    if(t.linea==='3"'){
-      if(!t.piezas.some(p=>p.perfil==='Riel adicional 3"'))t.piezas.splice(2,0,{perfil:'Riel adicional 3"',base:'A',desc:0,cant:1});
-    }});
+  const c=D.config;const V=7;let ver=c.version||1;if(ver>=V)return false;
+  let invCambio=false;const renTipo={};
+  if(ver<2){
+    const ren={'Cabezal':'Cabezal 3"','Riel':'Riel 3"','Jamba':'Jamba 3"','Cerco':'Cerco 3"','Traslape':'Traslape 3"','Zoclo':'Zoclo 3"','Zoclo puerta':'Zoclo puerta 3"'};
+    const precio={};c.perfiles.forEach(p=>{const n=ren[p.nombre]||p.nombre;precio[n]=p;});
+    c.perfiles=[...CATALOGO.map(p=>({...p,precio:+(precio[p.nombre]?.precio)||0,tramo:+(precio[p.nombre]?.tramo)||p.tramo})),
+      ...c.perfiles.filter(p=>!ren[p.nombre]&&!CATALOGO.some(k=>k.nombre===p.nombre)).map(p=>({...p,linea:p.linea||'Otros',clave:p.clave||''}))];
+    D.inventario.forEach(x=>{if(ren[x.perfil]){x.perfil=ren[x.perfil];invCambio=true}});
+    c.tipos.forEach(t=>{t.piezas.forEach(p=>{if(ren[p.perfil])p.perfil=ren[p.perfil]});
+      if(!/[23]"$/.test(t.nombre)){const n=t.nombre+' 3"';renTipo[t.nombre]=n;t.nombre=n}t.linea??='3"';
+      if(t.linea==='3"'&&!t.piezas.some(p=>p.perfil==='Riel adicional 3"'))t.piezas.splice(2,0,{perfil:'Riel adicional 3"',base:'A',desc:0,cant:1})});
+    ver=2;
+  }
+  if(ver<5)c.tipos.forEach(t=>{if(t.linea==='3"')t.piezas=t.piezas.filter(p=>p.perfil!=='Jamba / chambrana 2"')});
+  if(ver<6){
+    // "doble corrediza" = 2 hojas que corren: las de 4 hojas se renombran O-X-X-O
+    c.tipos.forEach(t=>{if(REN_4H[t.nombre]){renTipo[t.nombre]=REN_4H[t.nombre];t.nombre=REN_4H[t.nombre]}});
+    // cerco y traslape de corrediza: alto − 4 cm
+    c.tipos.forEach(t=>t.piezas.forEach(p=>{if(esVerticalHoja(p)&&Math.abs((+p.desc||0)-2.8)<1e-9)p.desc=4}));
+  }
+  if(ver<7){
+    // fija −3 / corre −4, zoclos (A−18)/2 y (A−23.2)/3: se cargan las fórmulas del taller en los tipos de fábrica
+    const REN7={'Ventana corrediza 2 hojas 3"':'Ventana doble corrediza 2 hojas 3"','Ventana corrediza 3 hojas 3"':'Ventana triple corrediza 3 hojas 3"','Cancel 3 hojas 3"':'Cancel triple corrediza 3 hojas 3"',
+      'Ventana corrediza 2 hojas 2"':'Ventana doble corrediza 2 hojas 2"','Ventana corrediza 3 hojas 2"':'Ventana triple corrediza 3 hojas 2"'};
+    c.tipos.forEach(t=>{if(REN7[t.nombre]){const n=REN7[t.nombre];Object.keys(renTipo).forEach(k=>{if(renTipo[k]===t.nombre)renTipo[k]=n});renTipo[t.nombre]=n;t.nombre=n}});
+    const def={};tiposIniciales().forEach(t=>def[t.nombre]=t);
+    c.tipos.forEach(t=>{if(def[t.nombre]){t.piezas=def[t.nombre].piezas;t.linea=def[t.nombre].linea}});
+  }
+  CATALOGO.forEach(k=>{if(!c.perfiles.some(p=>p.nombre===k.nombre))c.perfiles.push({...k})});
   tiposIniciales().forEach(t=>{if(!c.tipos.some(x=>x.nombre===t.nombre))c.tipos.push(t)});
   c.version=V;
   return {invCambio,renTipo};
@@ -587,7 +633,7 @@ function renderRes(){
   $('#despiece').innerHTML=obrasCalc().map(o=>`<div class="desp-obra"><h3>${esc(o.nombre||'Obra del '+fechaTxt(o.fecha))}<small>${fechaTxt(o.fecha)}</small></h3><div class="desp-grid">
     ${o.ventanas.map(t=>{const tipo=D.config.tipos.find(x=>x.nombre===t.tipo);const A=+t.ancho,H=+t.alto,n=Math.max(1,Math.round(+t.cant||1));
       return `<div class="desp"><h4>${esc(t.nombre||'Sin nombre')}</h4><div class="meta">${esc(t.tipo)} · ${fmt(A)} × ${fmt(H)} cm${n>1?` · ${n} iguales`:''}</div>
-      ${tipo?`<table><thead><tr><th>Perfil</th><th class="num">Medida (cm)</th><th class="num">Piezas</th></tr></thead><tbody>${tipo.piezas.map(p=>{const L=evalPieza(p,A,H);return `<tr><td>${esc(p.perfil)}</td><td class="num">${isNaN(L)?'—':fmt(L)}</td><td class="num">${(+p.cant||0)*n}</td></tr>`}).join('')}</tbody></table>`:'<p class="hint">Tipo no válido.</p>'}</div>`}).join('')||'<p class="hint">Sin ventanas.</p>'}
+      ${tipo?`<table><thead><tr><th>Perfil</th><th class="num">Medida (cm)</th><th class="num">Piezas</th></tr></thead><tbody>${tipo.piezas.map(p=>{const L=evalPieza(p,A,H);return `<tr><td>${esc(p.perfil)}${p.nota?` <small style="color:var(--muted)">(${esc(p.nota)})</small>`:''}</td><td class="num">${isNaN(L)?'—':fmt(L)}</td><td class="num">${(+p.cant||0)*n}</td></tr>`}).join('')}</tbody></table>`:'<p class="hint">Tipo no válido.</p>'}</div>`}).join('')||'<p class="hint">Sin ventanas.</p>'}
   </div></div>`).join('')||'<p class="hint">Sin obras seleccionadas.</p>';
   $('#planes').innerHTML=res.filter(r=>r.barras.length).map(r=>`<div class="perfil">
     <div class="perfil-head"><h3>${esc(r.perf.nombre)}</h3><small>${r.barras.reduce((s,b)=>s+b.cortes.length,0)} cortes · ${r.barras.length} tramos (${r.nuevas} nuevos)</small></div>
@@ -604,18 +650,23 @@ $('#guardarHoja').onclick=async()=>{
   if(modo!=='nube'){di('Sin conexión con el taller: no se pudo guardar en la hoja.');return}
   const res=ultimo||[];const obras=obrasCalc();if(!obras.length){di('Marca al menos una obra para guardar.');return}
   const r2=x=>Math.round(x*100)/100;
-  const reporte={fecha:new Date().toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'}),obras:obras.map(nombreObra),
+  const clave=n=>(D.config.perfiles.find(p=>p.nombre===n)||{}).clave||'';
+  const reporte={fecha:new Date().toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'}),obras:obras.map(nombreObra),minUtil:+D.config.minUtil||30,
     compra:res.filter(r=>r.necesario>0).map(r=>{const deInv=r.barras.filter(b=>b.fuente==='inv').reduce((s,b)=>s+b.cortes.reduce((x,c)=>x+c.len,0),0);
       return [r.perf.nombre,r.perf.clave||'',r2(r.necesario/100),r2(deInv/100),r.nuevas,r2(r.perf.tramo/100),r2(r.nuevas*(+r.perf.precio||0))]}),
-    despiece:[],plan:[]};
-  obras.forEach(o=>o.ventanas.forEach(v=>{const t=D.config.tipos.find(x=>x.nombre===v.tipo);if(!t)return;const n=Math.max(1,Math.round(+v.cant||1));
-    t.piezas.forEach(p=>{const L=evalPieza(p,+v.ancho,+v.alto);reporte.despiece.push([nombreObra(o),o.fecha||'',v.nombre||'',v.tipo,+v.ancho,+v.alto,p.perfil,isNaN(L)?'':r2(L),(+p.cant||0)*n])})}));
-  res.forEach(r=>r.barras.forEach((b,i)=>reporte.plan.push([r.perf.nombre,i+1,b.fuente==='inv'?'Del taller':'Comprar',b.largo,b.cortes.map(c=>fmt(c.len)+' ('+(c.et||'')+')').join(' + '),r2(b.rest)])));
+    despiece:obras.map(o=>({obra:nombreObra(o),fecha:fechaTxt(o.fecha),ventanas:o.ventanas.map(v=>{const t=D.config.tipos.find(x=>x.nombre===v.tipo);const n=Math.max(1,Math.round(+v.cant||1));
+      return {nombre:v.nombre||'',tipo:v.tipo,ancho:+v.ancho,alto:+v.alto,cant:n,piezas:t?t.piezas.map(p=>{const L=evalPieza(p,+v.ancho,+v.alto);return [p.perfil+(p.nota?' ('+p.nota+')':''),isNaN(L)?'':r2(L),(+p.cant||0)*n,clave(p.perfil)]}):[]}})})),
+    plan:res.filter(r=>r.barras.length).map(r=>({perfil:r.perf.nombre,clave:r.perf.clave||'',nuevas:r.nuevas,
+      barras:r.barras.map(b=>({taller:b.fuente==='inv',largo:b.largo,rest:r2(b.rest),cortes:b.cortes.map(c=>({len:c.len,et:c.et||''}))}))}))};
   di('Guardando en tu hoja…');
   try{const rr=await fetch(api.url,{method:'POST',body:JSON.stringify({clave:api.clave,accion:'reporte',reporte})});const j=await rr.json();
     if(!j.ok)throw new Error(j.error);di('✓ Guardado en tu hoja: pestañas Compra, Despiece, Plan de cortes e Historial de compras.')}
   catch(e){di(e.message==='clave'?'La clave del taller no es correcta.':'No se pudo guardar. Si acabas de actualizar el código del servidor, revisa que publicaste una Nueva versión.')}
 };
+$('#imprimir').onclick=()=>{
+  const obras=obrasCalc();
+  $('#printHead').innerHTML=`<b style="font-size:13pt">Cortes de Aluminio Godo</b><br>Impreso: ${new Date().toLocaleString('es-MX',{dateStyle:'long',timeStyle:'short'})} · Obras: ${esc(obras.map(nombreObra).join(', ')||'—')}`;
+  window.print()};
 $('#copyCompra').onclick=()=>{const txt='LISTA DE COMPRA – Cortes de Aluminio Godo\nObras: '+obrasCalc().map(o=>o.nombre).join(', ')+'\n'+(ultimo||[]).filter(x=>x.nuevas>0).map(x=>`${x.perf.nombre}: ${x.nuevas} tramo(s) de ${fmt(x.perf.tramo/100,2)} m`).join('\n');
   navigator.clipboard.writeText(txt).then(()=>{$('#copyMsg').hidden=false;setTimeout(()=>$('#copyMsg').hidden=true,2000)}).catch(()=>{$('#json').value=txt;show('formulas')})};
 $('#aplicar').onclick=()=>{const n=obrasCalc().length;if(!n)return;$('#confirmTxt').textContent=`¿Marcar ${n} obra(s) como cortadas y actualizar el material del taller?`;$('#confirmBox').hidden=false};
@@ -645,7 +696,7 @@ function renderForm(){
     <div class="row"><input id="ty${ti}" data-tk="nombre" data-ti="${ti}" value="${esc(t.nombre)}" style="flex:1;font-weight:600"><select id="tl${ti}" data-tl="1" data-ti="${ti}" style="width:110px" aria-label="Línea">${['3"','2"','1 3/4"'].map(l=>`<option${l===t.linea?' selected':''}>${l}</option>`).join('')}</select><button class="x" data-deltipo="${ti}" aria-label="Quitar tipo">×</button></div>
     <div class="tablewrap"><table><thead><tr><th>Perfil</th><th>Se mide sobre</th><th class="num">Menos (cm)</th><th class="num">Piezas</th><th class="num">Prueba ${fmt(C.prueba.A,0)}×${fmt(C.prueba.H,0)}</th><th></th></tr></thead><tbody>
     ${t.piezas.map((p,pi)=>{const v=evalPieza(p,+C.prueba.A,+C.prueba.H);return `<tr>
-      <td><select id="fp${ti}_${pi}" data-ti="${ti}" data-pi="${pi}" data-pk="perfil">${perfOpts(p.perfil)}</select></td>
+      <td><select id="fp${ti}_${pi}" data-ti="${ti}" data-pi="${pi}" data-pk="perfil">${perfOpts(p.perfil)}</select>${p.nota?`<small style="color:var(--muted)">${esc(p.nota)}</small>`:''}</td>
       <td><select id="fb${ti}_${pi}" data-ti="${ti}" data-pi="${pi}" data-pk="base">${BASES.map(([k,l])=>`<option value="${k}"${k===p.base?' selected':''}>${l}</option>`).join('')}</select></td>
       <td class="num">${p.base==='F'?`<input class="${isNaN(v)?'bad':''}" id="ff${ti}_${pi}" data-ti="${ti}" data-pi="${pi}" data-pk="formula" value="${esc(p.formula||'')}" placeholder="(A+0.6)/2-3.6">`:`<input class="w-s" type="number" step="0.1" id="fd${ti}_${pi}" data-ti="${ti}" data-pi="${pi}" data-pk="desc" value="${p.desc??0}">`}</td>
       <td class="num"><input class="w-s" id="fc${ti}_${pi}" type="number" min="1" data-ti="${ti}" data-pi="${pi}" data-pk="cant" value="${p.cant}"></td>

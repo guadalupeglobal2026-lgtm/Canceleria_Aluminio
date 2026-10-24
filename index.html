@@ -37,6 +37,7 @@ h3{font-family:var(--display);font-weight:600;font-size:1.2rem;margin:0}
 .who input{width:150px}
 .hoja-link{font-size:.85rem;font-weight:600;color:var(--accent);text-decoration:none;border:1px solid var(--accent);border-radius:4px;padding:4px 10px}
 .hoja-link:hover{background:var(--accent-soft)}
+.salir-btn{font-size:.85rem;padding:4px 10px}
 .status{font-size:.82rem;font-weight:600;color:var(--muted)}
 .status.ok{color:var(--ok)}.status.bad{color:var(--bad)}
 .tabs{display:flex;gap:4px;flex-wrap:wrap;border-bottom:2px solid var(--line)}
@@ -120,6 +121,7 @@ textarea{font-family:var(--mono);font-size:.8rem;min-height:120px}
       <div class="row">
         <a class="hoja-link" id="linkHoja" href="#" target="_blank" rel="noopener" hidden>Abrir hoja de Google ↗</a>
         <span class="status" id="status" role="status">Conectando…</span>
+        <button class="salir-btn" id="salir" hidden>Cerrar sesión</button>
       </div>
     </div>
   </header>
@@ -221,9 +223,9 @@ textarea{font-family:var(--mono);font-size:.8rem;min-height:120px}
     <div id="tipos" style="display:flex;flex-direction:column;gap:12px"></div>
     <div class="row"><button id="addTipo">+ Agregar tipo</button></div>
     <h2>Respaldo e importación</h2>
-    <p class="hint">Pega aquí un respaldo (también acepta el de la calculadora anterior en Claude) y presiona «Importar». Las obras importadas se agregan a las del taller.</p>
+    <p class="hint"><b>Generar respaldo</b> crea una copia en texto de todo el sistema (obras, material y fórmulas) para guardarla aparte, por ejemplo en un documento o en WhatsApp. <b>Importar</b> sirve para recuperar esa copia o para pasar datos de la calculadora anterior en Claude: pega el texto aquí y presiona Importar. Las obras importadas se agregan a las que ya existen.</p>
     <textarea id="json" aria-label="Respaldo de datos"></textarea>
-    <div class="row"><button id="exportar">Generar respaldo</button><button id="copyJson">Copiar</button><button id="importar">Importar</button><button id="salir">Cerrar sesión en este equipo</button><span class="note" id="jsonMsg" hidden></span></div>
+    <div class="row"><button id="exportar">Generar respaldo</button><button id="copyJson">Copiar</button><button id="importar">Importar</button><span class="note" id="jsonMsg" hidden></span></div>
   </section>
   </div>
 </div>
@@ -700,7 +702,7 @@ function show(v){document.querySelectorAll('[data-view]').forEach(s=>s.hidden=s.
 document.querySelectorAll('.tab').forEach(t=>t.onclick=()=>show(t.dataset.v));
 $('#filtro').value=['pend','todas','cort'].includes(ls.get('filtro'))?ls.get('filtro'):'pend';
 
-function abrirApp(){const hu=ls.get('hojaUrl');if(hu)ponerLinkHoja(hu);$('#login').hidden=true;$('#app').hidden=false;renderTodo();show(ls.get('tab')||'obras')}
+function abrirApp(){$('#salir').hidden=false;const hu=ls.get('hojaUrl');if(hu)ponerLinkHoja(hu);$('#login').hidden=true;$('#app').hidden=false;renderTodo();show(ls.get('tab')||'obras')}
 async function iniciar(){
   try{const c=JSON.parse(ls.get('cache')||'null');if(c&&c.config){D=c;normalizar()}}catch(e){}
   if(!api.url||!api.clave){$('#login').hidden=false;$('#lUrlBox').hidden=!!API_URL;$('#lUrl').value=api.url;status('Sin conectar','');return}

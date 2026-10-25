@@ -162,8 +162,9 @@ textarea{font-family:var(--mono);font-size:.8rem;min-height:120px}
   <div id="app" hidden style="display:flex;flex-direction:column;gap:18px">
   <nav class="tabs" role="tablist">
     <button class="tab" role="tab" data-v="obras">1 · Obras</button>
-    <button class="tab" role="tab" data-v="inventario">2 · Material del taller</button>
-    <button class="tab" role="tab" data-v="resultado">3 · Compra y cortes</button>
+    <button class="tab" role="tab" data-v="pendientes">2 · Cortes pendientes</button>
+    <button class="tab" role="tab" data-v="inventario">3 · Material del taller</button>
+    <button class="tab" role="tab" data-v="resultado">4 · Compra y cortes</button>
     <button class="tab" role="tab" data-v="formulas">Perfiles y fórmulas</button>
   </nav>
 
@@ -179,6 +180,18 @@ textarea{font-family:var(--mono);font-size:.8rem;min-height:120px}
   </section>
 
   <!-- INVENTARIO -->
+  <section class="panel" data-view="pendientes" hidden>
+    <div class="row" style="justify-content:space-between"><h2>Cortes pendientes</h2>
+      <label class="field" for="filtroPend" style="flex-direction:row;align-items:center;gap:8px">Mostrar
+        <select id="filtroPend" style="width:auto"><option value="pend">Pendientes</option><option value="cort">Ya cortados</option><option value="todos">Todos</option></select></label></div>
+    <p class="hint">Piezas sueltas que faltan para completar otros trabajos: una pieza que se dañó, una ventana que quedó incompleta, una reposición. Anota para qué es, el perfil y la medida exacta. Las piezas pendientes entran en <b>Compra y cortes</b> junto con las obras, para aprovechar el mismo material.</p>
+    <div class="tablewrap"><table>
+      <thead><tr><th>Para (ventana / obra)</th><th>Perfil</th><th class="num">Medida (cm)</th><th class="num">Cant.</th><th>Fecha</th><th>Estado</th><th></th></tr></thead>
+      <tbody id="tbPend"></tbody>
+    </table></div>
+    <div class="row"><button id="addPend">+ Agregar pieza</button></div>
+  </section>
+
   <section class="panel" data-view="inventario" hidden>
     <h2>Material del taller</h2>
     <p class="hint">Un solo inventario para todo el taller. Anota cada tramo completo o sobrante por perfil, con su largo útil. Cuando una obra se marca como cortada, el sistema descuenta lo que usó y agrega los sobrantes útiles.</p>
@@ -384,7 +397,9 @@ function migrarCatalogo(){
 }
 
 /* ---------- estado ---------- */
-let D={config:configInicial(),inventario:[],obras:[]};
+const ID_PEND='cortes-pendientes';
+let D={config:configInicial(),inventario:[],obras:[],pend:{id:ID_PEND,pendientes:true,piezas:[]}};
+let calcPend=true;
 let obraSel=ls.get('obraSel')||null;
 let calcSel=null; // ids de obras a calcular (null = todas las pendientes)
 let modo='nube';
@@ -426,6 +441,7 @@ async function enviar(){
   }finally{guardando=false;if(pend.size)setTimeout(enviar,500)}
 }
 const guardarObra=o=>{o.act=Date.now();encolar('obra',o.id,o)};
+const guardarPend=()=>{D.pend.act=Date.now();encolar('obra',ID_PEND,D.pend)};
 const guardarInv=()=>encolar('inventario',null,D.inventario);
 const guardarCfg=()=>encolar('config',null,D.config);
 
@@ -436,7 +452,7 @@ async function refrescar(silencioso){
     const ae=document.activeElement;const editando=ae&&['INPUT','SELECT','TEXTAREA'].includes(ae.tagName);
     if(editando&&silencioso)return;
     if(j.hojaUrl){ls.set('hojaUrl',j.hojaUrl);ponerLinkHoja(j.hojaUrl)}
-    D.config=j.config||D.config;D.inventario=j.inventario||[];D.obras=j.obras||[];
+    D.config=j.config||D.config;D.inventario=j.inventario||[];const todas=j.obras||[];D.pend=todas.find(o=>o.id===ID_PEND)||{id:ID_PEND,pendientes:true,piezas:[]};D.obras=todas.filter(o=>o.id!==ID_PEND&&!o.pendientes);
     normalizar();cacheLocal();renderTodo();
     if(!j.config)guardarCfg();
     status('✓ Al día con el taller','ok');
@@ -448,6 +464,7 @@ function normalizar(){
     guardarCfg();if(mig.invCambio)guardarInv()}
   const c=D.config;c.perfiles.forEach(p=>{p.linea??='Otros';p.clave??=''});c.tipos.forEach(t=>{t.linea??=(/2"$/.test(t.nombre)?'2"':'3"')});c.prueba??={A:150,H:120};c.kerf??=0.4;c.minUtil??=30;
   c.tipos.forEach(t=>t.piezas.forEach(p=>{if(!p.base)p.base='F'}));
+  D.pend??={id:ID_PEND,pendientes:true,piezas:[]};D.pend.piezas??=[];D.obras=D.obras.filter(o=>o.id!==ID_PEND&&!o.pendientes);
   D.obras.forEach(o=>{o.ventanas??=[];o.estado??='pendiente';delete o['respon'+'sable'];delete o.por;
     if(!o.fecha){const d=new Date(o.creada||Date.now());o.fecha=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0')}});
   D.obras.sort((a,b)=>(b.fecha||'').localeCompare(a.fecha||'')||(b.creada||0)-(a.creada||0));
@@ -518,6 +535,29 @@ $('#obraEd').addEventListener('click',e=>{const o=D.obras.find(x=>x.id===obraSel
   else if(t.id==='borrarObra'){$('#borrarBox').hidden=false}
   else if(t.id==='borrarNo'){$('#borrarBox').hidden=true}
   else if(t.id==='borrarSi'){D.obras=D.obras.filter(x=>x.id!==o.id);encolar('obra',o.id,null,'borrar');obraSel=null;renderObras()}});
+
+/* ---------- CORTES PENDIENTES ---------- */
+function renderPend(){
+  const f=$('#filtroPend').value;const P=D.pend.piezas;
+  const filas=P.map((x,i)=>({x,i})).filter(({x})=>f==='todos'||(f==='pend'&&x.estado!=='cortado')||(f==='cort'&&x.estado==='cortado'));
+  $('#tbPend').innerHTML=filas.map(({x,i})=>`<tr>
+    <td><input id="qp${i}" data-k="para" data-i="${i}" value="${esc(x.para)}" placeholder="Ej. Ventana cocina, obra Metepec" style="min-width:180px"></td>
+    <td><select id="qf${i}" data-k="perfil" data-i="${i}" style="min-width:160px">${perfOpts(x.perfil)}</select></td>
+    <td class="num"><input class="w-s" id="qm${i}" type="number" step="0.1" data-k="medida" data-i="${i}" value="${x.medida}"></td>
+    <td class="num"><input class="w-s" id="qc${i}" type="number" min="1" step="1" data-k="cant" data-i="${i}" value="${x.cant}"></td>
+    <td style="white-space:nowrap;color:var(--muted)">${fechaTxt(x.fecha)}</td>
+    <td><select id="qe${i}" data-k="estado" data-i="${i}" style="min-width:125px"><option value="pendiente"${x.estado!=='cortado'?' selected':''}>Pendiente</option><option value="cortado"${x.estado==='cortado'?' selected':''}>Cortado</option></select></td>
+    <td><button class="x" data-del="${i}" aria-label="Quitar">×</button></td></tr>`).join('')||`<tr><td colspan="7" class="hint">${f==='cort'?'No hay piezas cortadas.':'No hay cortes pendientes. Usa «+ Agregar pieza».'}</td></tr>`;
+}
+$('#tbPend').addEventListener('input',e=>{const el=e.target,i=el.dataset.i;if(i==null)return;const x=D.pend.piezas[i];
+  x[el.dataset.k]=el.type==='number'?(parseFloat(el.value)||0):el.value;guardarPend();if(el.dataset.k==='estado')renderPend()});
+$('#tbPend').addEventListener('click',e=>{const d=e.target.dataset.del;if(d==null)return;D.pend.piezas.splice(+d,1);guardarPend();renderPend()});
+$('#addPend').onclick=()=>{const prev=D.pend.piezas[D.pend.piezas.length-1];
+  D.pend.piezas.push({para:prev?.para||'',perfil:prev?.perfil||'Zoclo 3"',medida:100,cant:1,fecha:hoy(),estado:'pendiente'});
+  if($('#filtroPend').value==='cort')$('#filtroPend').value='pend';guardarPend();renderPend();const n=D.pend.piezas.length-1;const el=document.getElementById('qp'+n);if(el)el.select()};
+$('#filtroPend').onchange=renderPend;
+const piezasPend=()=>D.pend.piezas.filter(x=>x.estado!=='cortado'&&+x.medida>0);
+const pendCalc=()=>calcPend?piezasPend():[];
 
 /* ---------- INVENTARIO ---------- */
 function perfOpts(sel){const P=D.config.perfiles;const ls_=[...LINEAS,...new Set(P.map(p=>p.linea).filter(l=>!LINEAS.includes(l)))];
@@ -627,6 +667,9 @@ function calcular(){
       if(!(L>0)){errores.push(`Medida inválida en «${tipo.nombre}» → ${p.perfil}`);return}
       for(let k=0;k<n*(+p.cant||0);k++)(cortes[p.perfil]??=[]).push({len:Math.round(L*10)/10,et:t.nombre||'',obra:o.nombre||''})});
   }));
+  pendCalc().forEach(x=>{const n=Math.max(1,Math.round(+x.cant||1));
+    if(!C.perfiles.some(p=>p.nombre===x.perfil)){errores.push(`Corte pendiente «${x.para||'sin descripción'}»: el perfil «${x.perfil}» no está en la lista de perfiles.`);return}
+    for(let k=0;k<n;k++)(cortes[x.perfil]??=[]).push({len:Math.round(+x.medida*10)/10,et:x.para||'Pendiente',obra:'Cortes pendientes'})});
   const kerf=+C.kerf||0,minU=+C.minUtil||0,res=[];
   for(const perf of C.perfiles){
     const lista=(cortes[perf.nombre]||[]).slice().sort((a,b)=>b.len-a.len);
@@ -644,6 +687,8 @@ let ultimo=null;
 function renderRes(){
   const pendObras=D.obras.filter(o=>o.estado!=='cortada');
   $('#selObras').innerHTML=pendObras.map(o=>`<label><input type="checkbox" data-calc="${o.id}"${!calcSel||calcSel.has(o.id)?' checked':''}> ${esc(o.nombre||'Obra')} <small style="color:var(--muted)">${fechaTxt(o.fecha)}</small></label>`).join('')||'<p class="hint">No hay obras pendientes.</p>';
+  const np=piezasPend().reduce((s,x)=>s+Math.max(1,Math.round(+x.cant||1)),0);
+  if(np)$('#selObras').insertAdjacentHTML('beforeend',`<label><input type="checkbox" data-calcpend="1"${calcPend?' checked':''}> <b>Cortes pendientes</b> <small style="color:var(--muted)">${np} pieza(s)</small></label>`);
   const {res,errores,minU}=calcular();ultimo=res;
   $('#errores').innerHTML=errores.length?`<div class="err"><b>Revisa:</b><br>${errores.map(esc).join('<br>')}</div>`:'';
   let tram=0,costo=0,usado=0,usadoInv=0,cons=0,util=0,desp=0;
@@ -656,7 +701,11 @@ function renderRes(){
     ${costo>0?`<div class="tile"><b>${money(costo)}</b><span>costo estimado de compra</span></div>`:''}`;
   $('#tbCompra').innerHTML=res.filter(r=>r.necesario>0).map(r=>{const deInv=r.barras.filter(b=>b.fuente==='inv').reduce((s,b)=>s+b.cortes.reduce((x,c)=>x+c.len,0),0);
     return `<tr><td>${esc(r.perf.nombre)}</td><td class="num">${fmt(r.necesario/100,2)}</td><td class="num">${fmt(deInv/100,2)} m</td><td class="num"><b>${r.nuevas}</b> × ${fmt(r.perf.tramo/100,2)} m</td><td class="num">${+r.perf.precio?money(r.nuevas*r.perf.precio):'—'}</td></tr>`}).join('')||'<tr><td colspan="5" class="hint">Marca al menos una obra con ventanas.</td></tr>';
-  $('#despiece').innerHTML=obrasCalc().map(o=>`<div class="desp-obra"><h3>${esc(o.nombre||'Obra del '+fechaTxt(o.fecha))}<small>${fechaTxt(o.fecha)}</small></h3><div class="desp-grid">
+  const pc=pendCalc();
+  const bloquePend=pc.length?`<div class="desp-obra"><h3>Cortes pendientes<small>${pc.length} renglón(es)</small></h3>
+    <div class="tablewrap"><table><thead><tr><th>Para</th><th>Perfil</th><th class="num">Medida (cm)</th><th class="num">Piezas</th></tr></thead><tbody>
+    ${pc.map(x=>`<tr><td>${esc(x.para||'—')}</td><td>${esc(x.perfil)}</td><td class="num">${fmt(+x.medida)}</td><td class="num">${Math.max(1,Math.round(+x.cant||1))}</td></tr>`).join('')}</tbody></table></div></div>`:'';
+  $('#despiece').innerHTML=bloquePend+obrasCalc().map(o=>`<div class="desp-obra"><h3>${esc(o.nombre||'Obra del '+fechaTxt(o.fecha))}<small>${fechaTxt(o.fecha)}</small></h3><div class="desp-grid">
     ${o.ventanas.map(t=>{const tipo=D.config.tipos.find(x=>x.nombre===t.tipo);const A=+t.ancho,H=+t.alto,n=Math.max(1,Math.round(+t.cant||1));
       return `<div class="desp"><h4>${esc(t.nombre||'Sin nombre')}</h4><div class="meta">${esc(t.tipo)} · ${fmt(A)} × ${fmt(H)} cm${n>1?` · ${n} iguales`:''}</div>
       ${tipo?`<table><thead><tr><th>Perfil</th><th class="num">Medida (cm)</th><th class="num">Piezas</th></tr></thead><tbody>${tipo.piezas.map(p=>{const L=evalPieza(p,A,H);return `<tr><td>${esc(nombrePieza(p))}</td><td class="num">${isNaN(L)?'—':fmt(L)}</td><td class="num">${(+p.cant||0)*n}</td></tr>`}).join('')}</tbody></table>`:'<p class="hint">Tipo no válido.</p>'}</div>`}).join('')||'<p class="hint">Sin ventanas.</p>'}
@@ -667,21 +716,23 @@ function renderRes(){
       <div class="track">${b.cortes.map(c=>`<div class="cut" style="flex:0 0 ${c.len/W*100}%" title="${fmt(c.len)} cm · ${esc(c.et)} · ${esc(c.obra)}">${fmt(c.len)}<small>${esc(c.et)}</small></div>`).join('')}${b.rest>0.05?`<div class="rest${b.rest>=minU?' util':''}" style="flex:1 1 auto">${b.rest/W>.08?fmt(b.rest):''}</div>`:''}</div></div>`}).join('')}
   </div>`).join('')||'<p class="hint">Sin cortes por ahora.</p>';
 }
-$('#selObras').addEventListener('change',e=>{const id=e.target.dataset.calc;if(!id)return;
+$('#selObras').addEventListener('change',e=>{if(e.target.dataset.calcpend){calcPend=e.target.checked;renderRes();return}const id=e.target.dataset.calc;if(!id)return;
   if(!calcSel)calcSel=new Set(D.obras.filter(o=>o.estado!=='cortada').map(o=>o.id));
   e.target.checked?calcSel.add(id):calcSel.delete(id);renderRes()});
 function nombreObra(o){return o.nombre||('Obra del '+fechaTxt(o.fecha))}
 $('#guardarHoja').onclick=async()=>{
   const m=$('#hojaMsg');const di=t=>{m.textContent=t;m.hidden=false};
   if(modo!=='nube'){di('Sin conexión con el taller: no se pudo guardar en la hoja.');return}
-  const res=ultimo||[];const obras=obrasCalc();if(!obras.length){di('Marca al menos una obra para guardar.');return}
+  const res=ultimo||[];const obras=obrasCalc();const pc=pendCalc();if(!obras.length&&!pc.length){di('Marca al menos una obra o los cortes pendientes para guardar.');return}
   const r2=x=>Math.round(x*100)/100;
   const clave=n=>(D.config.perfiles.find(p=>p.nombre===n)||{}).clave||'';
-  const reporte={fecha:new Date().toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'}),obras:obras.map(nombreObra),minUtil:+D.config.minUtil||30,
+  const reporte={fecha:new Date().toLocaleString('es-MX',{dateStyle:'medium',timeStyle:'short'}),obras:obras.map(nombreObra).concat(pc.length?['Cortes pendientes']:[]),minUtil:+D.config.minUtil||30,
     compra:res.filter(r=>r.necesario>0).map(r=>{const deInv=r.barras.filter(b=>b.fuente==='inv').reduce((s,b)=>s+b.cortes.reduce((x,c)=>x+c.len,0),0);
       return [r.perf.nombre,r.perf.clave||'',r2(r.necesario/100),r2(deInv/100),r.nuevas,r2(r.perf.tramo/100),r2(r.nuevas*(+r.perf.precio||0))]}),
     despiece:obras.map(o=>({obra:nombreObra(o),fecha:fechaTxt(o.fecha),ventanas:o.ventanas.map(v=>{const t=D.config.tipos.find(x=>x.nombre===v.tipo);const n=Math.max(1,Math.round(+v.cant||1));
-      return {nombre:v.nombre||'',tipo:v.tipo,ancho:+v.ancho,alto:+v.alto,cant:n,piezas:t?t.piezas.map(p=>{const L=evalPieza(p,+v.ancho,+v.alto);return [nombrePieza(p),isNaN(L)?'':r2(L),(+p.cant||0)*n,clave(p.perfil)]}):[]}})})),
+      return {nombre:v.nombre||'',tipo:v.tipo,ancho:+v.ancho,alto:+v.alto,cant:n,piezas:t?t.piezas.map(p=>{const L=evalPieza(p,+v.ancho,+v.alto);return [nombrePieza(p),isNaN(L)?'':r2(L),(+p.cant||0)*n,clave(p.perfil)]}):[]}})})).concat(pc.length?[{obra:'CORTES PENDIENTES',fecha:'piezas sueltas',
+      ventanas:[...new Set(pc.map(x=>x.para||'Sin descripción'))].map(para=>({nombre:para,tipo:'Corte pendiente',ancho:'',alto:'',cant:1,
+        piezas:pc.filter(x=>(x.para||'Sin descripción')===para).map(x=>[x.perfil,r2(+x.medida),Math.max(1,Math.round(+x.cant||1)),clave(x.perfil)])}))}]:[]),
     plan:res.filter(r=>r.barras.length).map(r=>({perfil:r.perf.nombre,clave:r.perf.clave||'',nuevas:r.nuevas,
       barras:r.barras.map(b=>({taller:b.fuente==='inv',largo:b.largo,rest:r2(b.rest),cortes:b.cortes.map(c=>({len:c.len,et:c.et||''}))}))}))};
   di('Guardando en tu hoja…');
@@ -695,17 +746,19 @@ $('#imprimir').onclick=()=>{
   window.print()};
 $('#copyCompra').onclick=()=>{const txt='LISTA DE COMPRA – Cortes de Aluminio Godo\nObras: '+obrasCalc().map(o=>o.nombre).join(', ')+'\n'+(ultimo||[]).filter(x=>x.nuevas>0).map(x=>`${x.perf.nombre}: ${x.nuevas} tramo(s) de ${fmt(x.perf.tramo/100,2)} m`).join('\n');
   navigator.clipboard.writeText(txt).then(()=>{$('#copyMsg').hidden=false;setTimeout(()=>$('#copyMsg').hidden=true,2000)}).catch(()=>{$('#json').value=txt;show('formulas')})};
-$('#aplicar').onclick=()=>{const n=obrasCalc().length;if(!n)return;$('#confirmTxt').textContent=`¿Marcar ${n} obra(s) como cortadas y actualizar el material del taller?`;$('#confirmBox').hidden=false};
+$('#aplicar').onclick=()=>{const n=obrasCalc().length,np=pendCalc().length;if(!n&&!np)return;$('#confirmTxt').textContent=`¿Marcar como cortado${n?` ${n} obra(s)`:''}${n&&np?' y':''}${np?` ${np} corte(s) pendiente(s)`:''}, y actualizar el material del taller?`;$('#confirmBox').hidden=false};
 $('#aplicarNo').onclick=()=>{$('#confirmBox').hidden=true};
 $('#aplicarSi').onclick=async()=>{
   $('#confirmBox').hidden=true;
   if(modo==='nube'){try{await enviar();await refrescar(false)}catch(e){status('Sin conexión: no se actualizó el material','bad');return}}
-  const {res,minU}=calcular();const obras=obrasCalc();if(!obras.length)return;
+  const {res,minU}=calcular();const obras=obrasCalc();const pc=pendCalc();if(!obras.length&&!pc.length)return;
   const inv=[];res.forEach(x=>{x.sinUsar.forEach(b=>inv.push({perfil:x.perf.nombre,largo:b.largo,cant:1,nota:b.nota||''}));
     x.barras.forEach(b=>{if(b.rest>=minU)inv.push({perfil:x.perf.nombre,largo:Math.round(b.rest*10)/10,cant:1,nota:'sobrante'})})});
   const m={};inv.forEach(p=>{const k=p.perfil+'|'+p.largo+'|'+p.nota;if(m[k])m[k].cant++;else m[k]={...p}});
   D.inventario=Object.values(m);guardarInv();
-  obras.forEach(o=>{o.estado='cortada';guardarObra(o)});calcSel=null;renderTodo();show('inventario');
+  obras.forEach(o=>{o.estado='cortada';guardarObra(o)});
+  if(pc.length){pc.forEach(x=>{x.estado='cortado';x.cortado=hoy()});guardarPend()}
+  calcSel=null;renderTodo();show('inventario');
 };
 
 /* ---------- FÓRMULAS ---------- */
@@ -762,7 +815,8 @@ $('#copyJson').onclick=()=>{const t=$('#json');if(!t.value)t.value=JSON.stringif
 $('#importar').onclick=()=>{let d;try{d=JSON.parse($('#json').value)}catch(e){msg('El texto no es un respaldo válido.');return}
   if(d.config&&Array.isArray(d.obras)){ // respaldo de este sistema
     D.config=d.config;guardarCfg();if(Array.isArray(d.inventario)){D.inventario=d.inventario;guardarInv()}
-    d.obras.forEach(o=>{if(!D.obras.some(x=>x.id===o.id)){D.obras.push(o);guardarObra(o)}});
+    d.obras.forEach(o=>{if(o.id===ID_PEND||o.pendientes)return;if(!D.obras.some(x=>x.id===o.id)){D.obras.push(o);guardarObra(o)}});
+    if(d.pend&&Array.isArray(d.pend.piezas)){d.pend.piezas.forEach(x=>D.pend.piezas.push(x));guardarPend()}
   }else if(d.perfiles&&d.tipos){ // calculadora anterior en Claude
     D.config={kerf:d.kerf??0.4,minUtil:d.minUtil??30,prueba:d.prueba||{A:150,H:120},perfiles:d.perfiles.map(p=>({nombre:p.nombre,tramo:+p.tramo||610,precio:+p.precio||0})),tipos:d.tipos.map(t=>({nombre:t.nombre,piezas:t.piezas}))};guardarCfg();
     if(Array.isArray(d.inventario)){D.inventario=d.inventario;guardarInv()}
@@ -772,7 +826,7 @@ $('#importar').onclick=()=>{let d;try{d=JSON.parse($('#json').value)}catch(e){ms
 $('#salir').onclick=()=>{ls.del('clave');ls.del('url');location.reload()};
 
 /* ---------- navegación y arranque ---------- */
-function renderTodo(){renderObras();renderInv();renderForm();if(!$('[data-view="resultado"]').hidden)renderRes()}
+function renderTodo(){renderObras();renderPend();renderInv();renderForm();if(!$('[data-view="resultado"]').hidden)renderRes()}
 function show(v){document.querySelectorAll('[data-view]').forEach(s=>s.hidden=s.dataset.view!==v);
   document.querySelectorAll('.tab').forEach(t=>t.setAttribute('aria-selected',t.dataset.v===v));
   if(v==='resultado')renderRes();ls.set('tab',v)}

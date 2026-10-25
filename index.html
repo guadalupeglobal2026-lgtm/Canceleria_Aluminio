@@ -269,7 +269,7 @@ const money=n=>'$'+Number(n).toLocaleString('es-MX',{minimumFractionDigits:2,max
 
 /* Catálogo Cuprum Línea Nacional 2" y 3" (claves de referencia del catálogo Cuprum; verifícalas con tu proveedor) */
 const CATALOGO=[
-  ['Cabezal 3"','3"','67836',610],['Riel 3"','3"','69957',610],['Riel adicional 3"','3"','',610],['Jamba 3"','3"','67826',610],
+['Riel 3"','3"','69957',610],['Riel adicional 3"','3"','',610],['Jamba 3"','3"','67826',610],
   ['Cerco 3"','3"','67843',610],['Traslape 3"','3"','67844',610],['Zoclo 3"','3"','67835',610],['Zoclo puerta 3"','3"','67842',610],
   ['Cerco chapa puerta 3"','3"','67847',610],['Traslape puerta 3"','3"','67848',460],['Cerco OXXO 3"','3"','67850',460],
   ['Intermedio 3"','3"','69082',610],['Adaptador XX 3"','3"','7828',610],['Adaptador fijo 3"','3"','28681',610],['Tapa bolsa 3"','3"','10237',610],
@@ -289,8 +289,8 @@ function tiposIniciales(){
   const q=(perfil,base,desc,cant,nota)=>nota?{perfil,base,desc,cant,nota}:{perfil,base,desc,cant};
   const f=(perfil,formula,cant,nota)=>nota?{perfil,base:'F',formula,desc:0,cant,nota}:{perfil,base:'F',formula,desc:0,cant};
   const FIJA='hoja fija',CORRE='hoja que corre';
-  const marco3=()=>[q('Cabezal 3"','A',0,1),q('Riel 3"','A',0,1),q('Riel adicional 3"','A',0,1),q('Jamba 3"','H',2.8,2)];
-  const marco2=()=>[q('Jamba / chambrana 2"','A',0,1),q('Riel 2"','A',0,1),q('Jamba / chambrana 2"','H',2.8,2)];
+  const marco3=()=>[q('Jamba 3"','A',0,1,'jamba superior'),q('Riel 3"','A',0,1),q('Riel adicional 3"','A',0,1),q('Jamba 3"','H',2.8,2,'jamba lateral')];
+  const marco2=()=>[q('Jamba / chambrana 2"','A',0,1,'jamba superior'),q('Riel 2"','A',0,1),q('Jamba / chambrana 2"','H',2.8,2,'jamba lateral')];
   /* Regla del taller: cerco y traslape de hoja fija = alto − 3 cm; de hoja que corre = alto − 4 cm.
      Zoclo 3": 2 hojas = (ancho − 18) ÷ 2 ; 3 hojas = (ancho − 23.2) ÷ 3 */
   return [
@@ -324,14 +324,14 @@ function tiposIniciales(){
   ];
 }
 function configInicial(){
-  return {version:9,kerf:0.4,minUtil:30,prueba:{A:150,H:120},perfiles:CATALOGO.map(p=>({...p})),tipos:tiposIniciales()};
+  return {version:10,kerf:0.4,minUtil:30,prueba:{A:150,H:120},perfiles:CATALOGO.map(p=>({...p})),tipos:tiposIniciales()};
 }
 /* Pasa una configuración anterior (solo 3") al catálogo completo, sin perder descuentos ni precios ya capturados */
 const REN_4H={'Ventana doble corrediza 4 hojas 3"':'Ventana 4 hojas O-X-X-O 3"','Cancel doble corrediza 4 hojas 3"':'Cancel 4 hojas O-X-X-O 3"','Puerta doble corrediza 4 hojas 3"':'Puerta 4 hojas O-X-X-O 3"',
   'Ventana doble corrediza 4 hojas 2"':'Ventana 4 hojas O-X-X-O 2"','Cancel doble corrediza 4 hojas 2"':'Cancel 4 hojas O-X-X-O 2"','Puerta doble corrediza 4 hojas 2"':'Puerta 4 hojas O-X-X-O 2"'};
 const esVerticalHoja=p=>p.base==='H'&&(/^(Cerco|Traslape)/.test(p.perfil)||p.perfil==='Adaptador OXXO');
 function migrarCatalogo(){
-  const c=D.config;const V=9;let ver=c.version||1;if(ver>=V)return false;
+  const c=D.config;const V=10;let ver=c.version||1;if(ver>=V)return false;
   let invCambio=false;const renTipo={};
   if(ver<2){
     const ren={'Cabezal':'Cabezal 3"','Riel':'Riel 3"','Jamba':'Jamba 3"','Cerco':'Cerco 3"','Traslape':'Traslape 3"','Zoclo':'Zoclo 3"','Zoclo puerta':'Zoclo puerta 3"'};
@@ -365,6 +365,17 @@ function migrarCatalogo(){
     c.tipos.forEach(t=>{if(REN9[t.nombre]){const n=REN9[t.nombre];Object.keys(renTipo).forEach(k=>{if(renTipo[k]===t.nombre)renTipo[k]=n});renTipo[t.nombre]=n;t.nombre=n}});
     Object.keys(REN9).forEach(k=>{if(!renTipo[k])renTipo[k]=REN9[k]});
     Object.keys(renTipo).forEach(k=>{if(REN9[renTipo[k]])renTipo[k]=REN9[renTipo[k]]});
+  }
+  if(ver<10){
+    // El "cabezal" es el mismo perfil que la jamba: se llama jamba superior y sale del material de Jamba 3"
+    c.tipos.forEach(t=>t.piezas.forEach(p=>{
+      if(p.perfil==='Cabezal 3"'){p.perfil='Jamba 3"';p.nota='jamba superior'}
+      else if((p.perfil==='Jamba 3"'||p.perfil==='Jamba / chambrana 2"')&&!p.nota)p.nota=(p.base==='H'?'jamba lateral':'jamba superior');
+    }));
+    const cab=c.perfiles.find(p=>p.nombre==='Cabezal 3"'),jam=c.perfiles.find(p=>p.nombre==='Jamba 3"');
+    if(cab&&jam&&!(+jam.precio)&&+cab.precio)jam.precio=cab.precio;
+    c.perfiles=c.perfiles.filter(p=>p.nombre!=='Cabezal 3"');
+    D.inventario.forEach(x=>{if(x.perfil==='Cabezal 3"'){x.perfil='Jamba 3"';invCambio=true}});
   }
   CATALOGO.forEach(k=>{if(!c.perfiles.some(p=>p.nombre===k.nombre))c.perfiles.push({...k})});
   tiposIniciales().forEach(t=>{if(!c.tipos.some(x=>x.nombre===t.nombre))c.tipos.push(t)});
